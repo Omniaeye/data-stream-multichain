@@ -1,0 +1,10 @@
+import type {BrainDatum} from './brain-routing';
+export type FieldFamily={id:string;label:string;category:string;keys:string[];color:string};
+export type FieldGroup={presentedAt?:string;id:string;family:FieldFamily;tokenKey:string;tokenName:string;chain:string;receivedAt?:string;captureId:string;window:string;rows:BrainDatum[]};
+export type GroupedStream={rows:FieldGroup[];total:number;byChain:Record<string,number>;latest?:string};
+export const FIELD_FAMILIES:FieldFamily[];
+export const FAMILY_COLORS:Record<string,string>;
+export function familyFor(key:string):FieldFamily;
+export function groupDataPoints(rows:BrainDatum[]):FieldGroup[];
+export function groupSummary(group:FieldGroup):string;
+export function appendGroupedStream(state:GroupedStream,groups:FieldGroup[]):GroupedStream;

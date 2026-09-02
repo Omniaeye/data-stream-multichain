@@ -1,0 +1,13 @@
+.token-arrival.token-arrival-social{display:block;width:344px;z-index:24;border-radius:14px 4px 14px 14px;border-color:color-mix(in srgb,var(--token-accent) 42%,#16362c);background:radial-gradient(ellipse at 0 0,color-mix(in srgb,var(--token-accent) 10%,transparent),transparent 62%),linear-gradient(145deg,#0c201cf8,#06100ffb);box-shadow:0 16px 50px #0009,inset 0 1px #beffe815;max-height:calc(100dvh - 130px);overflow:auto;scrollbar-width:thin}
+.token-arrival-social:before{content:'';position:absolute;top:0;left:22px;width:64px;height:2px;background:var(--token-accent);box-shadow:0 0 12px var(--token-accent)}
+.token-arrival-social .token-arrival-open{width:100%;padding:17px 36px 15px 17px;gap:12px}
+.token-arrival-social .token-arrival-copy{flex:1;gap:7px}.token-arrival-social .token-arrival-copy small{display:flex;align-items:center;gap:6px;color:var(--token-accent)}
+.token-arrival-copy small i{width:4px;height:4px;border-radius:50%;background:currentColor;box-shadow:0 0 8px currentColor}
+.token-arrival-social .token-arrival-copy strong{display:flex;gap:12px;align-items:baseline;font-size:17px}.token-arrival-copy em{font:11px 'IBM Plex Mono',monospace;color:#9cbea9;letter-spacing:-.02em;margin-left:auto}
+.token-arrival-copy b{margin-left:auto;font-weight:400;color:#b6d5c6}
+.token-arrival-social .token-arrival-logo{width:43px;height:43px;border-color:var(--token-accent);box-shadow:0 0 17px color-mix(in srgb,var(--token-accent) 12%,transparent)}
+.token-arrival-social .token-arrival-close{position:absolute;top:3px;right:4px}
+.token-arrival-post{margin:0 17px 17px;padding-top:14px;border-top:1px solid #8dd5b921}
+.token-arrival-social .token-arrival-lifetime{background:linear-gradient(90deg,transparent,var(--token-accent));height:2px}
+.token-arrival-social button:focus-visible,.token-arrival-social a:focus-visible{outline:1px solid var(--token-accent);outline-offset:-3px}
+@media(max-width:700px){.token-arrival.token-arrival-social{width:320px;max-width:calc(100vw - 24px);top:80px;max-height:calc(100dvh - 100px)}}
