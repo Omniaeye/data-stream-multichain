@@ -1,0 +1,7 @@
+import {createRoot} from 'react-dom/client';
+import {useEffect,useState} from 'react';
+import type {Capture} from './agent-trading/AgentTradingJev';
+import {AttractorPreview} from './agent-trading/AttractorPreview';
+import {applyEnvelope,revisionOf,retryDelay} from './agent-trading/live-sync';
+function App(){const [capture,setCapture]=useState<Capture>(),[error,setError]=useState(false);useEffect(()=>{let stopped=false,timer:ReturnType<typeof setTimeout>,request:AbortController|undefined,current:Capture|undefined,failures=0;async function update(){request=new AbortController();try{const revision=current?revisionOf(current):undefined,response=await fetch('/__jev/live?sync=1'+(revision?'&since='+encodeURIComponent(revision):''),{signal:AbortSignal.any([request.signal,AbortSignal.timeout(12000)]),cache:'no-store',headers:revision?{'If-None-Match':`"${revision}"`}:{}});if(response.status!==304){if(!response.ok)throw Error('Capture unavailable');const text=await response.text();if(text.length>24000000)throw Error('Capture exceeds browser budget');const next=applyEnvelope(current,JSON.parse(text));if(!stopped){current=next;setCapture(next);}}if(!stopped){setError(false);failures=0;}}catch{if(!stopped){setError(true);failures++;}}if(!stopped)timer=setTimeout(update,failures?retryDelay(failures):1000);}void update();return()=>{stopped=true;request?.abort();clearTimeout(timer);};},[]);return <AttractorPreview capture={capture} connectionError={error}/>;}
+createRoot(document.getElementById('root')!).render(<App/>);
