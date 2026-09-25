@@ -29,10 +29,15 @@ sequenceDiagram
 | --- | --- |
 | `domain.ts` | stable vocabulary for nodes, edges, evidence, events, and reads |
 | `evidence.ts` | provenance invariants and endpoint validation |
+| `event-factory.ts` | normalized token and field event construction |
 | `graph.ts` | event ingestion, adjacency, paths, and snapshots |
 | `temporal-memory.ts` | activation and time decay per node |
 | `projection.ts` | deterministic graph-to-neural-field positions |
+| `topology.ts` | neural regions and weighted synapse projection |
+| `relations.ts` | typed relation construction and shared-attribute linking |
+| `query.ts` | evidence trails, active communities, and graph queries |
 | `laya-contract.ts` | bounded evidence packet and typed context read validation |
+| `evaluation.ts` | reviewed-read agreement and evidence coverage metrics |
 
 ## Invariants
 
