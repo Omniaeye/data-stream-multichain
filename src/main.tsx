@@ -1,4 +1,9 @@
 import {createRoot} from 'react-dom/client';
+import '@fontsource/manrope/latin-400.css';
+import '@fontsource/manrope/latin-500.css';
+import '@fontsource/manrope/latin-600.css';
+import '@fontsource/ibm-plex-mono/latin-400.css';
+import '@fontsource/ibm-plex-mono/latin-500.css';
 import {useEffect,useState} from 'react';
 import type {Capture} from './agent-trading/AgentTradingJev';
 import {AttractorPreview} from './agent-trading/AttractorPreview';

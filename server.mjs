@@ -1,4 +1,25 @@
-import {createReadStream,existsSync} from 'node:fs';import {createServer} from 'node:http';import {extname,join,normalize} from 'node:path';
-const root=join(process.cwd(),'dist'),port=Number(process.env.PORT||3000),types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.webp':'image/webp','.woff':'font/woff','.woff2':'font/woff2','.wasm':'application/wasm'};
-function upstream(name,request,response){const origin=process.env[name];if(!origin){response.writeHead(503,{'Content-Type':'application/json','Cache-Control':'no-store'});response.end(JSON.stringify({error:'Connector unavailable'}));return;}const url=new URL(request.url,origin);fetch(url,{headers:{accept:request.headers.accept||'application/json'},signal:AbortSignal.timeout(12000)}).then(async result=>{const body=Buffer.from(await result.arrayBuffer());response.writeHead(result.status,{'Content-Type':result.headers.get('content-type')||'application/json','Cache-Control':'no-store',ETag:result.headers.get('etag')||''});response.end(body);}).catch(()=>{response.writeHead(503,{'Content-Type':'application/json','Cache-Control':'no-store'});response.end(JSON.stringify({error:'Connector unavailable'}));});}
-createServer((request,response)=>{const pathname=new URL(request.url,'http://localhost').pathname;if(pathname==='/healthz'){response.writeHead(200,{'Content-Type':'application/json'});response.end('{"ok":true}');return;}if(pathname==='/__jev/live'){upstream('DATA_STREAM_UPSTREAM',request,response);return;}if(pathname==='/__jev/news'){upstream('NEWS_STREAM_UPSTREAM',request,response);return;}const safe=normalize(pathname).replace(/^([.]{2}[\\/])+/,''),file=join(root,safe==='/'?'index.html':safe),resolved=existsSync(file)?file:join(root,'index.html');response.writeHead(200,{'Content-Type':types[extname(resolved)]||'application/octet-stream','Cache-Control':resolved.endsWith('index.html')?'no-cache':'public, max-age=31536000, immutable'});createReadStream(resolved).pipe(response);}).listen(port,'0.0.0.0',()=>console.log(`JEV Neural Data Stream listening on ${port}`));
+/** Copyright 2026 OMNIA EYE Corporation. All rights reserved. */
+import {createReadStream,existsSync,statSync} from 'node:fs';
+import {createServer} from 'node:http';
+import {extname,resolve,sep} from 'node:path';
+import {createConnector} from './src/server/connector.mjs';
+const root=resolve('dist'),connector=createConnector(process.env);
+const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.woff':'font/woff','.woff2':'font/woff2','.wasm':'application/wasm','.ico':'image/x-icon'};
+const server=createServer(async(req,res)=>{
+ let url;try{url=new URL(req.url,'http://site');}catch{res.writeHead(400);res.end();return;}
+ if(!['GET','HEAD'].includes(req.method)){res.writeHead(405);res.end();return;}
+ if(url.pathname==='/healthz'){res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'});res.end('{"ok":true}');return;}
+ if(url.pathname.startsWith('/__jev/'))return connector(req,res,url);
+ let path;try{path=decodeURIComponent(url.pathname);}catch{res.writeHead(400);res.end();return;}
+ let file=resolve(root,'.'+path);
+ if(file!==root&&!file.startsWith(root+sep)){res.writeHead(404);res.end();return;}
+ if(file===root)file=resolve(root,'index.html');
+ if(!existsSync(file)||!statSync(file).isFile()){
+  if(!extname(path)&&req.headers.accept?.includes('text/html'))file=resolve(root,'index.html');
+  else{res.writeHead(404);res.end();return;}
+ }
+ res.writeHead(200,{'content-type':types[extname(file)]||'application/octet-stream','cache-control':file.endsWith('index.html')?'no-cache':'public, max-age=31536000, immutable','x-content-type-options':'nosniff'});
+ if(req.method==='HEAD')res.end();else createReadStream(file).on('error',()=>res.destroy()).pipe(res);
+});
+server.listen(Number(process.env.PORT||3000),'::');
+process.on('SIGTERM',()=>server.close(()=>process.exit(0)));

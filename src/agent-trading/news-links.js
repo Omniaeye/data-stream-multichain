@@ -80,7 +80,7 @@ export function newsRecord(event,at=new Date().toISOString()){
 }
 
 export function linkNews(references,events,now=Date.now()){
- const eligible=events.filter(event=>recentNews(event,now)),byUrl=new Map(eligible.map(event=>[event.url,event])),byProfile=new Map(),groups=new Map();
+ const eligible=events.filter(event=>recentNews(event,now)&&!(/^(reposted|retweeted)$/i.test((event.body||event.title||'').trim())&&!event.media?.length)),byUrl=new Map(eligible.map(event=>[event.url,event])),byProfile=new Map(),groups=new Map();
  const signatures=new Map(eligible.map(event=>[event.url,coverageSignature(event)]));
  for(const event of eligible){const profile=authorProfile(event);if(profile){if(!byProfile.has(profile))byProfile.set(profile,[]);byProfile.get(profile).push(event);}}
  for(const ref of references){

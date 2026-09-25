@@ -7,3 +7,4 @@ dist/
 *.sqlite
 *.sqlite-*
 npm-debug.log*
+artifacts/

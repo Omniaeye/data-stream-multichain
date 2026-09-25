@@ -17,6 +17,7 @@ export function NewsTokenLinks({tokens,onSelect,news}:{tokens:Token[];onSelect:(
    <div className="news-token-story"><div className="news-author" title={`${link.event.platform} · ${link.event.author?.handle||link.event.sourceLabel}`}>
     {link.event.author?.avatar?<img src={link.event.author.avatar} alt="" referrerPolicy="no-referrer" onError={e=>{e.currentTarget.hidden=true;}}/>:<span className="news-author-placeholder" aria-hidden="true">{link.event.platform.slice(0,1).toUpperCase()}</span>}
     <span className="news-author-name">{link.event.author?.name||link.event.sourceLabel||link.event.platform}</span>
+    {link.evidence.every(ref=>ref.match==='author_profile')&&<span className="news-author-followers" title="Recent publication from a profile linked in token metadata. No direct post reference was captured.">PROFILE</span>}
     {link.event.author?.followers!=null&&<span className="news-author-followers" title={`${link.event.author.followers.toLocaleString('en-US')} followers`}>{new Intl.NumberFormat('en-US',{notation:'compact',maximumFractionDigits:1}).format(link.event.author.followers)} followers</span>}
     <time dateTime={link.event.publishedAt??undefined} title={link.event.publishedAt??''}>{Math.max(0,Math.floor((now-Date.parse(link.event.publishedAt!))/60000))||'<1'}m</time>
    </div><a href={link.event.sourceUrl??link.event.url} target="_blank" rel="noopener noreferrer" title={link.event.title}>{link.event.title}</a></div>
