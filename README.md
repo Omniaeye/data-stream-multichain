@@ -119,6 +119,7 @@ npm run build
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md) — system boundaries, data movement, and design decisions.
+- [JEV Neural Graph](docs/JEV-NEURAL-GRAPH.md) — temporal graph, provenance, activation, and Laya context contract.
 - [Data contract](docs/DATA-CONTRACT.md) — normalized envelopes and provenance invariants.
 - [Security](docs/SECURITY.md) — trust boundaries and reporting path.
 - [Engineering references](docs/REFERENCES.md) — standards and technical sources that inform the system.
