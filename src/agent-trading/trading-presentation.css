@@ -1,0 +1,10 @@
+/* © 2026 OMNIA EYE Corporation. All Rights Reserved. */
+@import '@fontsource/ibm-plex-mono/latin-500.css';
+@import '@fontsource/ibm-plex-mono/latin-600.css';
+.attractor-field .brain-trading-pulse{font:600 11px/1.3 'IBM Plex Mono',monospace;letter-spacing:.12em;color:#b9f6cb;text-shadow:0 0 14px #8dfaab88;z-index:6;pointer-events:none}
+.attractor-field .brain-trading-pulse[data-action=skip]{color:#a8c6b4}.attractor-field .brain-trading-pulse[data-action=sl]{color:#e4b494}.attractor-field .brain-trading-pulse[data-action^=tp]{color:#daf7ae}
+.jev-trading-orb{position:absolute;top:0;left:0;width:5px;height:5px;border-radius:50%;background:var(--relay-color,#b4ef89);box-shadow:0 0 6px 1px var(--relay-color,#b4ef89),0 0 18px #a5f5c966;z-index:7;pointer-events:none;will-change:transform}
+.jev-trading-orb[hidden]{display:none}
+.attractor-field .brain-preview-label{padding:3px 6px;border:1px solid #426c5529;border-radius:2px;color:#86ab93;background:none;font:400 8px/1.2 'IBM Plex Mono',monospace;letter-spacing:.12em}
+@media(max-width:600px){.attractor-field .brain-trading-pulse{font-size:10px}.attractor-field .brain-preview-label{font-size:7px}}
+@media(prefers-reduced-motion:reduce){.jev-trading-orb{display:none}.attractor-field .brain-trading-pulse{will-change:auto}}

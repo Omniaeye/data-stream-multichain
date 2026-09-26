@@ -17,7 +17,7 @@ import {placeNewLabels} from './new-token-labels.js';
 import {compactCap,tokenTicker} from './token-details.js';
 import {createValueMotion} from './value-motion.js';
 
-export function createUniverse(host,onSelect,onError,onBrainInspect){
+export function createUniverse(host,onSelect,onError,onBrainInspect,trading={}){
  let disposed=false,renderer,controls,camera,scene,ready=false,paused=false,last=0,frames=0,statsAt=0,narrow=null;
  const badges=[],leavingBadges=[],badgeMap=new Map(),centers=[],worldPositions=new Map(),radii=new Map();
  let layoutCamera,packed,layoutSignature='',packedViewport='',fieldWidth=0,fieldHeight=0,cameraFlight=null,timelineOffset=0,timelineLimit=0,currentBounds,focusAnchor=null,focusFraction=.4;
@@ -36,7 +36,9 @@ export function createUniverse(host,onSelect,onError,onBrainInspect){
  const projected=new THREE.Vector3(),edge=new THREE.Vector3(),cameraRight=new THREE.Vector3();
  function frameCamera(){camera.position.set(0,narrow?.75:1.1,16);controls?.target.set(0,narrow?-.35:0,0);camera.lookAt(0,narrow?-.35:0,0);camera.updateMatrixWorld();}
  function unproject(x,y){const p=new THREE.Vector3(x/fieldWidth*2-1,1-y/fieldHeight*2,.5).unproject(layoutCamera),ray=p.sub(layoutCamera.position);return layoutCamera.position.clone().addScaledVector(ray,-layoutCamera.position.z/ray.z);}
- function placeBrain(){const anchors=sceneAnchors(fieldWidth,fieldHeight,narrow),origin=unproject(...anchors.origin);brain?.resize(narrow,{origin,ports:anchors.ports.map(p=>unproject(...p)),scale:origin.distanceTo(unproject(anchors.origin[0]+anchors.brainWidth/3,anchors.origin[1]))});}
+ function placeBrain(){const anchors=sceneAnchors(fieldWidth,fieldHeight,narrow),origin=unproject(...anchors.origin),panel=anchors.trading,parent=host.parentElement;
+  if(parent){parent.style.setProperty('--trading-left',(host.offsetLeft+panel.x)+'px');parent.style.setProperty('--trading-top',panel.y+'px');parent.style.setProperty('--trading-width',panel.width+'px');parent.style.setProperty('--trading-height',panel.height+'px');}
+  brain?.resize(narrow,{origin,ports:anchors.ports.map(p=>unproject(...p)),scale:origin.distanceTo(unproject(anchors.origin[0]+anchors.brainWidth/3,anchors.origin[1])),tradingTarget:[panel.x+3,panel.y+14]});}
  function layout(reroute=false){
   badgesDirty=true;centers.length=tokens.length;
   const items=tokens.filter(t=>!cohortSet||cohortSet.has(tokenKey(t))).map(t=>({key:tokenKey(t),band:['robinhood','bsc','solana'].indexOf(canonicalChain(t.chain)),time:timelineTime(t),arriving:(arriving.get(tokenKey(t))??0)>Date.now(),radius:Math.round((view==='global'?globalTokenDiameter(t):tokenAppearance(t).diameter)*2)/4}));
@@ -92,7 +94,7 @@ export function createUniverse(host,onSelect,onError,onBrainInspect){
   renderer=new THREE.WebGPURenderer({antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));renderer.setClearColor('#030809');host.append(renderer.domElement);await renderer.init();if(disposed){renderer.dispose();return;}
   scene=new THREE.Scene();camera=new THREE.PerspectiveCamera(30,1,.1,100);camera.position.set(3,5,8);
   controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.enableRotate=false;controls.screenSpacePanning=true;controls.minDistance=2;controls.maxDistance=20;resize();
-  brain=createNeuralBrain(scene,host,centers,()=>tokens,onBrainInspect,t=>radii.get(tokenKey(t))??tokenAppearance(t).radius);placeBrain();brain.setSources(sources);brain.setCohort(routingKeys);
+  brain=createNeuralBrain(scene,host,centers,()=>tokens,onBrainInspect,t=>radii.get(tokenKey(t))??tokenAppearance(t).radius,trading);placeBrain();brain.setSources(sources);brain.setCohort(routingKeys);
   clouds=createObservationClouds(scene,renderer,host,brain,tokens.map(tokenKey));brain.connect(()=>{const f=clouds.flow();if(f!==flowCache){flowCache=f;filteredFlow={...f,active:f.active.filter(r=>routingSet.has(r.datum.tokenKey))};}return filteredFlow;});
   clouds.setTokens(routingKeys);
   pendingRoutes.splice(0).forEach(route=>clouds.ingest(route));
@@ -102,7 +104,7 @@ export function createUniverse(host,onSelect,onError,onBrainInspect){
    const elapsed=Math.min((now-(last||now))/1000,.15);last=now;
    if(cameraFlight){const t=Math.min(1,(now-cameraFlight.start)/600),ease=1-(1-t)**3;controls.target.lerpVectors(cameraFlight.from,cameraFlight.to,ease);camera.position.lerpVectors(cameraFlight.eye,cameraFlight.end,ease);if(t===1)cameraFlight=null;}
    controls.update();const r=host.getBoundingClientRect();
-   const t0=performance.now();clouds.update(elapsed,camera,r.width,r.height,paused,reduced.matches);const t1=performance.now();brain.update(elapsed,camera,r.width,r.height,paused||reduced.matches);const t2=performance.now();
+   const t0=performance.now();clouds.update(elapsed,camera,r.width,r.height,paused,reduced.matches);const t1=performance.now();brain.update(elapsed,camera,r.width,r.height,paused,reduced.matches);const t2=performance.now();
    const matrix=camera.matrixWorld.elements.join(',')+':'+r.width+':'+r.height;if(badgesDirty||matrix!==lastMatrix){lastMatrix=matrix;badgesDirty=false;
    cameraRight.setFromMatrixColumn(camera.matrixWorld,0);
    const labels=[];

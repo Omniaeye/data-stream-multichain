@@ -4,7 +4,7 @@ import {sceneAnchors} from './scene-anchors.js';
 export function timelineTime(token){const time=Date.parse(token.firstSeenAt);return Number.isFinite(time)?time:0;}
 export function timelineBounds(width,height,compact,items=[]){
  const anchors=compact?sceneAnchors(width,height,true):null;
- const top=compact?Math.max(height*.64,anchors.origin[1]+anchors.brainWidth*.64+68):128,bottom=height-24,space=bottom-top;
+ const top=compact?Math.max(height*.64,anchors.trading.y+anchors.trading.height+48):128,bottom=height-24,space=bottom-top;
  const weights=[0,1,2].map(band=>items.filter(t=>t.band===band).reduce((n,t)=>n+(t.radius+8)**2,0)),total=weights.reduce((a,b)=>a+b,0);
  let y=top;
  return weights.map(weight=>{const height=space*(total ? .16+.52*weight/total : 1/3),bound={x:compact?16:width*.50,y,

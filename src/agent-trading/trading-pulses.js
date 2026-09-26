@@ -1,46 +1,37 @@
+/**
+ * © 2026 OMNIA EYE Corporation. All Rights Reserved.
+ * Proprietary and confidential.
+ */
 export const TRADING_PULSE_CYCLE_SECONDS=30;
 export const TRADING_PULSES_PER_CYCLE=7;
 
-const OPTIONS=[
- ['SKIP',12],['HOLD',4],['BUY',3],['HOLD MOONBAG',2],['PROFIT',2],
- ['TP1',2],['SL',2],['TP2',1],['TP3',1],['TP4',.45],['TP5',.25]
-];
+const CHAINS=['robinhood','bsc','solana'];
 
 function random(seed){
  let value=(seed>>>0)||1;
  return ()=>{value=(Math.imul(value,1664525)+1013904223)>>>0;return value/4294967296;};
 }
 
-function weighted(next,exclude){
- const choices=OPTIONS.filter(([label])=>!exclude.has(label));
- const total=choices.reduce((sum,[,weight])=>sum+weight,0),at=next()*total;
- let cursor=0;
- for(const [label,weight] of choices){cursor+=weight;if(at<=cursor)return label;}
- return choices.at(-1)[0];
-}
-
-// Seven visual pulses are spread across each full thirty-second cycle.
-// SKIP is deliberately common, but never fills an entire cycle.
+// Timing only. The position state machine owns BUY/HOLD/TP/close semantics.
 export function tradingPulseCycle(cycle){
- const next=random(Math.imul((cycle|0)+1,0x9e3779b1)),labels=['SKIP','SKIP','SKIP'],used=new Set(labels);
- while(labels.length<TRADING_PULSES_PER_CYCLE){
-  const cap=labels.filter(label=>label==='SKIP').length>=4;
-  const label=cap?weighted(next,new Set(['SKIP',...used])):weighted(next,used);
-  labels.push(label);used.add(label);
+ const cycleIndex=Math.max(0,Math.floor(Number.isFinite(cycle)?cycle:0));
+ const next=random(Math.imul(cycleIndex+1,0x9e3779b1));
+ const labels=['SKIP','SKIP','SKIP','EVALUATE','EVALUATE','EVALUATE','EVALUATE'];
+ for(let i=labels.length-1;i>0;i--){
+  const j=Math.floor(next()*(i+1));[labels[i],labels[j]]=[labels[j],labels[i]];
  }
- return labels.map((label,index)=>({
-  label,index,
-  // Each item occupies its own randomized slice. This keeps the brain in
-  // motion across the whole cycle instead of emitting a visible packet.
-  at:(index+.20+next()*.60)*(TRADING_PULSE_CYCLE_SECONDS/TRADING_PULSES_PER_CYCLE),
-  life:1.45+next()*.45,
-  // Positions live in the brain's local volume, never in a horizontal row.
-  position:[(next()-.5)*1.56,(next()-.5)*1.02,.72+next()*.25],
-  seed:next()
- }));
-}
-
-export function activeTradingPulses(time){
- const cycle=Math.floor(Math.max(0,time)/TRADING_PULSE_CYCLE_SECONDS),within=time-cycle*TRADING_PULSE_CYCLE_SECONDS;
- return tradingPulseCycle(cycle).filter(pulse=>within>=pulse.at&&within<pulse.at+pulse.life).map(pulse=>({...pulse,age:within-pulse.at,cycle}));
+ // Random gaps partition the free time after reserving room for each relay.
+ const gaps=Array.from({length:8},()=>.05+next()**2),total=gaps.reduce((a,b)=>a+b,0);
+ const free=30-7*2.8;let at=0;
+ return labels.map((label,index)=>{
+ at+=gaps[index]/total*free;
+ const slot={
+  id:`preview:${cycleIndex}:${index}`,kind:'presentation',subject:'CONFIDENTIAL',
+  label,index,cycle:cycleIndex,chain:CHAINS[Math.floor(next()*CHAINS.length)],
+  // Each randomized slice leaves room for the complete card to finish, even
+  // at the cycle boundary. No overlapping packets or disappearing last event.
+  at,
+  life:2.5+next()*.15,
+  position:[(next()-.5)*1.20,(next()-.5)*.64,.82],seed:next()
+ };at+=2.8;return slot;});
 }

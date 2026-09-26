@@ -3,7 +3,7 @@ import {sceneAnchors} from './scene-anchors.js';
 
 export function globalBounds(width,height,compact,items){
  const anchors=compact?sceneAnchors(width,height,true):null;
- const top=compact?Math.max(height*.62,anchors.origin[1]+anchors.brainWidth*.64+36):88,bottom=height-(compact?16:24),space=bottom-top;
+ const top=compact?Math.max(height*.62,anchors.trading.y+anchors.trading.height+16):88,bottom=height-(compact?16:24),space=bottom-top;
  const weights=[0,1,2].map(band=>items.filter(i=>i.band===band).reduce((sum,i)=>sum+Math.max(104,i.radius*2)*(i.radius*2+52),0));
  const total=weights.reduce((a,b)=>a+b,0);let y=top;
  return weights.map(weight=>{const h=space*(total ? .1+.7*weight/total : 1/3),b={x:compact?18:width*.49,y,width:compact?width-36:width*.49,height:h-8};y+=h;return b;});

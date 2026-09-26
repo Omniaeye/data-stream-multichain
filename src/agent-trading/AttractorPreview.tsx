@@ -16,9 +16,15 @@ import {NewsTokenLinks} from './NewsTokenLinks';
 import {useNewsSnapshot} from './useNewsSnapshot';
 import {ObservatoryEye} from './ObservatoryEye';
 import {SceneIcon} from './SceneIcon';
+import {TradingLedger} from './TradingLedger';
+import {mergeTradingRow,type TradingEvent} from './trading-session';
+import {createTradingFeed} from './trading-feed';
+import './trading-presentation.css';
 import './attractor-preview.css';
 
 export function AttractorPreview({capture,connectionError,arrivalHistoryKey}:{capture?:Capture;connectionError:boolean;arrivalHistoryKey?:string}){
+ const [tradingSession]=useState(createTradingFeed);
+ const [tradingRows,setTradingRows]=useState<TradingEvent[]>([]),[tradingError,setTradingError]=useState(false);
  const host=useRef<HTMLDivElement>(null),engine=useRef<ReturnType<typeof createUniverse>|null>(null),retained=useRef<Token[]>([]);
  const [view,setView]=useState('global'),[streamOpen,setStreamOpen]=useState(false);
  const [tracing,setTracing]=useState(false),focusRequest=useRef<string|null>(null);
@@ -42,7 +48,7 @@ export function AttractorPreview({capture,connectionError,arrivalHistoryKey}:{ca
  const visibleKeys=useMemo(()=>visible.map(tokenKey),[visible]);
  const eligibleKeys=useMemo(()=>view==='global'?visibleKeys:sceneCohort(tokens,{quality:true}).map(tokenKey),[tokens,view,cohortTick,visibleKeys]);
  function locateToken(key:string){if(!visibleKeys.includes(key))setView('global');focusRequest.current=key;setSelected(key);setBrain(null);}
- useEffect(()=>{if(!host.current)return;previous.current=undefined;pacer.current=createStreamPacer();setStream({rows:[],total:0,byChain:{}});const scene=createUniverse(host.current,key=>{setSelected(key);setBrain(null);},()=>setError(true),(_zone,inspection)=>{setSelected(null);setBrain(inspection);});engine.current=scene;
+ useEffect(()=>{if(!host.current)return;previous.current=undefined;pacer.current=createStreamPacer();setStream({rows:[],total:0,byChain:{}});const scene=createUniverse(host.current,key=>{setSelected(key);setBrain(null);},()=>setError(true),(_zone,inspection)=>{setSelected(null);setBrain(inspection);},{session:tradingSession,onEvent:event=>setTradingRows(rows=>mergeTradingRow(rows,event))});engine.current=scene;
   let listGroups: ReturnType<typeof pacer.current.take>=[],lastListPaint=0,lastReport=0,lastTick=performance.now();
   const visibilityChanged=()=>{
    lastTick=performance.now();
@@ -60,6 +66,17 @@ export function AttractorPreview({capture,connectionError,arrivalHistoryKey}:{ca
    scene.ingest({paced:true,rows,packets:[],observations:rows.length,visibleObservations:visible,otherObservations:rows.length-visible,captures:new Set(rows.map(r=>r.captureId)).size,unverified:0});
   },16);
   return()=>{clearInterval(timer);document.removeEventListener('visibilitychange',visibilityChanged);scene.dispose();};},[]);
+ useEffect(()=>{
+  let stopped=false,timer:ReturnType<typeof setTimeout>;const controller=new AbortController();
+  async function read(){try{
+   if(document.hidden)return;
+   const response=await fetch('/__jev/trading?after='+tradingSession.sequence,{signal:AbortSignal.any([controller.signal,AbortSignal.timeout(5000)])});
+   if(!response.ok)throw new Error('Trading preview unavailable');
+   const value=await response.json();if(stopped)return;
+   const restored=tradingSession.receive(value);if(restored)setTradingRows(restored);setTradingError(false);
+  }catch{if(!stopped)setTradingError(true);}finally{if(!stopped)timer=setTimeout(read,1000);}}
+  void read();return()=>{stopped=true;controller.abort();clearTimeout(timer);};
+ },[tradingSession]);
  useEffect(()=>{engine.current?.setMode(view);},[view]);
  useEffect(()=>{engine.current?.setTracked(tracing?[...tracked]:[]);},[tracing,tracked]);
  useEffect(()=>{engine.current?.setTokens(tokens);},[tokens]);
@@ -75,11 +92,12 @@ export function AttractorPreview({capture,connectionError,arrivalHistoryKey}:{ca
   <nav className="scene-modes" aria-label="Market universe">
    <button className="stream-launch" aria-label="Open data stream" aria-expanded={streamOpen} aria-controls="incoming-data-stream" onClick={()=>setStreamOpen(value=>!value)}><ObservatoryEye/><span>Data stream</span></button>
    <div className="scene-view-switch"><button title="Active tokens, ordered by their first arrival in the feed" aria-pressed={view==='discovery'} onClick={()=>setView('discovery')}>Trending <small>NEW</small></button><button title="All eligible tokens in one view; larger circles mean larger market cap" aria-pressed={view==='global'} onClick={()=>setView('global')}>Global</button></div>
-   <span className="scene-jev-trading" aria-label="JEV Trading AI, coming soon"><b>JEV TRADING AI</b><small>SOON</small></span>
+   <span className="scene-jev-trading" aria-label="JEV Trading AI, preview beta"><b>JEV TRADING AI</b><small>PREVIEW BETA</small></span>
    <div className="scene-tools"><button className="attractor-trace" aria-label="Social trace" title="Social trace" aria-pressed={tracing} onClick={()=>setTracing(value=>!value)}><SceneIcon kind="trace"/></button><button className="attractor-reset" aria-label="Reset view" title="Reset view" onClick={()=>engine.current?.resetView()}><SceneIcon kind="reset"/></button><button className="attractor-pause" aria-label={paused?'Resume motion':'Pause motion'} title={paused?'Resume motion':'Pause motion'} aria-pressed={paused} onClick={()=>{if(paused)pacer.current.resume(performance.now());motionFrozen.current=!paused;setPaused(!paused);engine.current?.pause(!paused);}}><SceneIcon kind={paused?'play':'pause'}/></button></div>
   </nav>
   <TokenArrivalNotice tokens={capture?.tokens??[]} visibleKeys={visibleKeys} eligibleKeys={eligibleKeys} news={news} historyKey={arrivalHistoryKey} onArrival={keys=>engine.current?.highlightTokens(keys)} onSelect={key=>{setTracing(true);locateToken(key);}}/>
   {capture?.mode!=='fixture'&&<NewsTokenLinks tokens={visible} news={news} onSelect={locateToken}/>}
+  <TradingLedger rows={tradingRows} disconnected={tradingError}/>
   {view==='discovery'&&!visible.length&&!connectionError&&<p className="attractor-state">No new tokens meet the current activity filters.</p>}
   {(error||!tokens.length||connectionError)&&<p className="attractor-state">{error?'Particle rendering unavailable on this device.':connectionError?'Connection interrupted · last received data retained':'Waiting for network captures…'}</p>}
   {brain&&<BrainDetails value={brain} onClose={()=>setBrain(null)}/>}

@@ -7,7 +7,7 @@ import {tokenAppearance} from './token-appearance.js';
 import {createFlowRibbons} from './flow-ribbons.js';
 import {chainMark} from './network-marks.js';
 import {createBrainTitles,BRAIN_TITLE_LIMIT} from './brain-titles.js';
-import {activeTradingPulses} from './trading-pulses.js';
+import {createTradingRelay} from './trading-relay.js';
 
 // A data-routing sculpture, not a depiction of model inference or trading.
  const ORIGIN=new THREE.Vector3(-1,0,0);
@@ -35,7 +35,7 @@ function cortex(theta,phi,side,depth=1){
   sz*.91*depth*fold+.09*sy);
 }
 
-export function createNeuralBrain(scene,host,centers,getTokens,onInspect,getRadius=t=>tokenAppearance(t).radius){
+export function createNeuralBrain(scene,host,centers,getTokens,onInspect,getRadius=t=>tokenAppearance(t).radius,trading={}){
  const resources=[],dom=[],group=new THREE.Group();group.position.copy(ORIGIN);scene.add(group);
  const track=r=>(resources.push(r),r),latest={},zoneTotals={};
  let getFlow=()=>({received:0,delivered:0,inFlight:0,pending:0,visible:0,other:0,changed:0,unverified:0,retired:0,retained:0,resident:0,active:[],selected:null});
@@ -134,7 +134,7 @@ export function createNeuralBrain(scene,host,centers,getTokens,onInspect,getRadi
   if(key==='other')el.hidden=true;regionLabels[key]=el;
  }
  const portLabels=CHAINS.map((chain,i)=>{const el=label('',ports[i].clone(),'brain-port');const img=document.createElement('img');img.src=chainMark(chain);img.alt=chain==='robinhood'?'Robinhood Chain':chain==='bsc'?'BSC':'Solana';const name=document.createElement('span');name.textContent=img.alt;el.append(img,name);return el;});
- const tradingTitle=label('JEV TRADING AI · SOON',ORIGIN.clone().add(new THREE.Vector3(0,1.30,0)),'brain-trading-title');
+ const tradingTitle=label('JEV TRADING AI · PREVIEW BETA',ORIGIN.clone().add(new THREE.Vector3(0,1.30,0)),'brain-trading-title');
  const caption=label('JEV NEURAL',ORIGIN.clone().add(new THREE.Vector3(0,-1.9,0)),'brain-title',()=>onInspect(null,inspection()));
  caption.setAttribute('aria-label','Inspect brain data flow');
  const otherLabel=label('',new THREE.Vector3(4.65,-3.5,0),'brain-other',()=>onInspect(null,inspection()));
@@ -147,12 +147,7 @@ export function createNeuralBrain(scene,host,centers,getTokens,onInspect,getRadi
   chip.el=label('',position,'brain-chip',()=>{if(chip.datum)onInspect(chip.datum.zone,{...inspection(chip.datum.zone),latest:chip.datum,activeRoute:true});});
   return chip;
  });
- const tradingChips=Array.from({length:7},(_,slot)=>{
-  const position=ORIGIN.clone(),chip={el:null,position,slot};
-  chip.el=label('',position,'brain-trading-pulse');
-  chip.el.setAttribute('aria-hidden','true');
-  return chip;
- });
+ const tradingRelay=createTradingRelay(host,trading);
  const portsPositions=ports.concat(others).flatMap(p=>p.toArray());const portDots=points(portsPositions,'#83bdb7',.12,0,scene);
 
  // The brain supplies anchors only. Observation clouds render the whole journey.
@@ -178,6 +173,7 @@ export function createNeuralBrain(scene,host,centers,getTokens,onInspect,getRadi
   radiusFor(datum){const token=tokenMap.get(datum.tokenKey)?.token;return token?getRadius(token):.06;},
   resize(compact,anchors=null){
    compactLayout=compact;
+   if(anchors?.tradingTarget)tradingRelay.target(anchors.tradingTarget);
    host.dataset.brainLayout=compact?'vertical':'horizontal';
    const origin=anchors?.origin??(compact?new THREE.Vector3(0,.40,0):ORIGIN);
    group.position.copy(origin);brainScale=anchors?.scale??1;group.scale.setScalar(brainScale);
@@ -200,8 +196,9 @@ export function createNeuralBrain(scene,host,centers,getTokens,onInspect,getRadi
   pathFor,
   connect(provider){getFlow=provider;},
   ingest(route){if(disposed)return;ribbons.ingest(route.rows);for(const row of route.rows){zoneTotals[row.zone]=(zoneTotals[row.zone]??0)+1;latest[row.zone]=row;lastDatum=row;}},
-  update(dt,camera,width,height,frozen=false){
+  update(dt,camera,width,height,paused=false,reducedMotion=false){
    if(disposed)return;
+   const frozen=paused||reducedMotion;
    if(!frozen)tagClock+=dt;labelClock+=dt;ribbons.update(frozen?0:dt,compactLayout);
    const flow=getFlow(),lit={};
    const active=flow.active.slice(0,48);pulses.count=active.length;
@@ -235,20 +232,7 @@ export function createNeuralBrain(scene,host,centers,getTokens,onInspect,getRadi
     chip.el.style.opacity=String(opacity);chip.el.style.transform=`translate(-50%,-50%) scale(${title ? .96+title.seed*.12 : 1})`;
     chip.el.style.pointerEvents=opacity>.1?'auto':'none';
    }
-   const activePulses=activeTradingPulses(tagClock);
-   host.dataset.tradingPulseCycle=String(Math.floor(tagClock/30));
-   for(const chip of tradingChips){
-    const pulse=activePulses.find(item=>item.index===chip.slot);
-    const opacity=pulse?Math.min(1,pulse.age/.16,Math.max(0,(pulse.life-pulse.age)/.28)):0;
-    if(pulse){
-     chip.el.textContent=pulse.label;
-     chip.el.dataset.action=pulse.label.toLowerCase().replaceAll(' ','-');
-     chip.el.dataset.cycle=String(pulse.cycle);
-     chip.position.copy(group.position).add(new THREE.Vector3(...pulse.position).multiplyScalar(brainScale));
-    }
-    chip.el.style.opacity=String(opacity);
-    chip.el.style.transform=`translate(-50%,-50%) scale(${pulse?1.08-pulse.age*.06:1})`;
-   }
+   tradingRelay.update(dt,camera,width,height,group.position,brainScale,paused,reducedMotion);
    for(const {el,position} of dom){
     projected.copy(position).project(camera);const hidden=el===otherLabel||Math.abs(projected.z)>1||Math.abs(projected.x)>1.05||Math.abs(projected.y)>1.05||(el===regionLabels.other&&!zoneTotals.other);if(el.hidden!==hidden)el.hidden=hidden;
     const left=((projected.x+1)*width/2).toFixed(2)+'px',top=((-projected.y+1)*height/2).toFixed(2)+'px';if(el.style.left!==left)el.style.left=left;if(el.style.top!==top)el.style.top=top;
@@ -259,6 +243,6 @@ export function createNeuralBrain(scene,host,centers,getTokens,onInspect,getRadi
     host.dataset.brainPending=String(flow.pending+flow.inFlight);host.dataset.brainOtherFields=String(flow.other);
    }
   },
-  dispose(){disposed=true;ribbons.dispose();dom.forEach(({el})=>el.remove());resources.forEach(r=>r.dispose());scene.remove(group,rimLight,fill,ambient,portDots,...Object.values(hubs));}
+  dispose(){disposed=true;tradingRelay.dispose();ribbons.dispose();dom.forEach(({el})=>el.remove());resources.forEach(r=>r.dispose());scene.remove(group,rimLight,fill,ambient,portDots,...Object.values(hubs));}
  };
 }
