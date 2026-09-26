@@ -28,7 +28,7 @@ export function AttractorPreview({capture,connectionError,arrivalHistoryKey}:{ca
  const pacer=useRef(createStreamPacer());
  const motionFrozen=useRef(false);
  const [stream,setStream]=useState<GroupedStream>({rows:[],total:0,byChain:{}});
- useEffect(()=>{const query=matchMedia('(max-width:1100px)');const changed=()=>{if(!query.matches)setStreamOpen(false);};query.addEventListener('change',changed);return()=>query.removeEventListener('change',changed);},[]);
+ useEffect(()=>{const query=matchMedia('(max-width:1120px)');const changed=()=>{if(!query.matches)setStreamOpen(false);};query.addEventListener('change',changed);return()=>query.removeEventListener('change',changed);},[]);
  const rosterTick=Math.floor(Date.now()/1000);
  const tokens=useMemo(()=>{
   retained.current=selectAttractors(retained.current,capture?.tokens??[],{exitGraceMs:TOKEN_EXIT_GRACE_MS});
@@ -43,16 +43,23 @@ export function AttractorPreview({capture,connectionError,arrivalHistoryKey}:{ca
  const eligibleKeys=useMemo(()=>view==='global'?visibleKeys:sceneCohort(tokens,{quality:true}).map(tokenKey),[tokens,view,cohortTick,visibleKeys]);
  function locateToken(key:string){if(!visibleKeys.includes(key))setView('global');focusRequest.current=key;setSelected(key);setBrain(null);}
  useEffect(()=>{if(!host.current)return;previous.current=undefined;pacer.current=createStreamPacer();setStream({rows:[],total:0,byChain:{}});const scene=createUniverse(host.current,key=>{setSelected(key);setBrain(null);},()=>setError(true),(_zone,inspection)=>{setSelected(null);setBrain(inspection);});engine.current=scene;
-  let listGroups: ReturnType<typeof pacer.current.take>=[],lastListPaint=0,lastTick=performance.now();
+  let listGroups: ReturnType<typeof pacer.current.take>=[],lastListPaint=0,lastReport=0,lastTick=performance.now();
+  const visibilityChanged=()=>{
+   lastTick=performance.now();
+   if(document.hidden){pacer.current.resetWindow();previous.current=undefined;}
+  };
+  document.addEventListener('visibilitychange',visibilityChanged);
   const timer=setInterval(()=>{const now=performance.now(),gap=now-lastTick;lastTick=now;
-   if(document.hidden||motionFrozen.current){pacer.current.defer(gap);return;}
+   if(document.hidden)return;
+   if(host.current&&now-lastReport>=250){lastReport=now;host.current.dataset.presentation=JSON.stringify(pacer.current.stats());}
+   if(motionFrozen.current){pacer.current.defer(gap);return;}
    if(gap>250)pacer.current.defer(gap-16);
    const groups=pacer.current.take(now);listGroups.push(...groups);
    if(listGroups.length&&now-lastListPaint>=100){const ready=listGroups;listGroups=[];lastListPaint=now;setStream(value=>appendGroupedStream(value,ready));}
    if(!groups.length)return;const rows=groups.flatMap(g=>g.rows),keys=new Set(retained.current.map(tokenKey)),visible=rows.filter(r=>keys.has(r.tokenKey)).length;
    scene.ingest({paced:true,rows,packets:[],observations:rows.length,visibleObservations:visible,otherObservations:rows.length-visible,captures:new Set(rows.map(r=>r.captureId)).size,unverified:0});
   },16);
-  return()=>{clearInterval(timer);scene.dispose();};},[]);
+  return()=>{clearInterval(timer);document.removeEventListener('visibilitychange',visibilityChanged);scene.dispose();};},[]);
  useEffect(()=>{engine.current?.setMode(view);},[view]);
  useEffect(()=>{engine.current?.setTracked(tracing?[...tracked]:[]);},[tracing,tracked]);
  useEffect(()=>{engine.current?.setTokens(tokens);},[tokens]);
@@ -60,7 +67,7 @@ export function AttractorPreview({capture,connectionError,arrivalHistoryKey}:{ca
  useEffect(()=>{engine.current?.setCohort(visibleKeys);pacer.current.setVisibleKeys(visibleKeys);},[visibleKeys]);
  useEffect(()=>{engine.current?.setSelected(selected);},[selected]);
  useEffect(()=>{const key=focusRequest.current;if(key&&visibleKeys.includes(key)){engine.current?.revealToken(key);focusRequest.current=null;}},[selected,visibleKeys]);
- useEffect(()=>{const route=routeCapturedData(previous.current,capture,tokens.map(tokenKey));pacer.current.add(route,performance.now(),capture?.sources);previous.current=capture;},[capture,tokens]);
+ useEffect(()=>{if(document.hidden){previous.current=undefined;return;}const route=routeCapturedData(previous.current,capture,tokens.map(tokenKey));pacer.current.add(route,performance.now(),capture?.sources);previous.current=capture;},[capture,tokens]);
  useEffect(()=>{const close=(event:KeyboardEvent)=>{if(event.key==='Escape'){setSelected(null);setBrain(null);setStreamOpen(false);}};window.addEventListener('keydown',close);return()=>window.removeEventListener('keydown',close);},[]);
  return <main className="attractor-page with-data-stream" data-trace={tracing} data-view={view}><div className="attractor-field" ref={host}/>
   <DataStream open={streamOpen} onClose={()=>setStreamOpen(false)} value={stream} globalStats={capture?.globalStats} sources={capture?.sources} presentation={capture?.presentation} connectionError={connectionError} onSelectDatum={datum=>engine.current?.selectDatum(datum)}/>
@@ -69,7 +76,7 @@ export function AttractorPreview({capture,connectionError,arrivalHistoryKey}:{ca
    <button className="stream-launch" aria-label="Open data stream" aria-expanded={streamOpen} aria-controls="incoming-data-stream" onClick={()=>setStreamOpen(value=>!value)}><ObservatoryEye/><span>Data stream</span></button>
    <div className="scene-view-switch"><button title="Active tokens, ordered by their first arrival in the feed" aria-pressed={view==='discovery'} onClick={()=>setView('discovery')}>Trending <small>NEW</small></button><button title="All eligible tokens in one view; larger circles mean larger market cap" aria-pressed={view==='global'} onClick={()=>setView('global')}>Global</button></div>
    <span className="scene-jev-trading" aria-label="JEV Trading AI, coming soon"><b>JEV TRADING AI</b><small>SOON</small></span>
-   <div className="scene-tools"><button className="attractor-trace" aria-label="Social trace" title="Social trace" aria-pressed={tracing} onClick={()=>setTracing(value=>!value)}><SceneIcon kind="trace"/></button><button className="attractor-reset" aria-label="Reset view" title="Reset view" onClick={()=>engine.current?.resetView()}><SceneIcon kind="reset"/></button><button className="attractor-pause" aria-label={paused?'Resume motion':'Pause motion'} title={paused?'Resume motion':'Pause motion'} aria-pressed={paused} onClick={()=>{motionFrozen.current=!paused;setPaused(!paused);engine.current?.pause(!paused);}}><SceneIcon kind={paused?'play':'pause'}/></button></div>
+   <div className="scene-tools"><button className="attractor-trace" aria-label="Social trace" title="Social trace" aria-pressed={tracing} onClick={()=>setTracing(value=>!value)}><SceneIcon kind="trace"/></button><button className="attractor-reset" aria-label="Reset view" title="Reset view" onClick={()=>engine.current?.resetView()}><SceneIcon kind="reset"/></button><button className="attractor-pause" aria-label={paused?'Resume motion':'Pause motion'} title={paused?'Resume motion':'Pause motion'} aria-pressed={paused} onClick={()=>{if(paused)pacer.current.resume(performance.now());motionFrozen.current=!paused;setPaused(!paused);engine.current?.pause(!paused);}}><SceneIcon kind={paused?'play':'pause'}/></button></div>
   </nav>
   <TokenArrivalNotice tokens={capture?.tokens??[]} visibleKeys={visibleKeys} eligibleKeys={eligibleKeys} news={news} historyKey={arrivalHistoryKey} onArrival={keys=>engine.current?.highlightTokens(keys)} onSelect={key=>{setTracing(true);locateToken(key);}}/>
   {capture?.mode!=='fixture'&&<NewsTokenLinks tokens={visible} news={news} onSelect={locateToken}/>}

@@ -16,7 +16,7 @@ export function DataStream({open=false,onClose,value,globalStats,sources,present
  const [held,setHeld]=useState<GroupedStream|null>(null),shown=held??value;
  useEffect(()=>{const node=viewport.current;if(!node)return;const observer=new ResizeObserver(()=>setHeight(node.clientHeight));observer.observe(node);return()=>observer.disconnect();},[]);
  useEffect(()=>{
-  if(!open||!matchMedia('(max-width:1100px)').matches)return;
+  if(!open||!matchMedia('(max-width:1120px)').matches)return;
   const opener=document.activeElement as HTMLElement|null,node=rail.current;
   node?.querySelector<HTMLButtonElement>('.stream-close')?.focus();
   const trap=(event:KeyboardEvent)=>{

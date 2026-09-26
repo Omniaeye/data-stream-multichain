@@ -38,3 +38,21 @@ export function applyEnvelope(current,message){
  return result;
 }
 export const retryDelay = (failures,random=Math.random) => failures===0?5000:Math.min(30000,1000*2**Math.min(failures,5))*(.85+random()*.3);
+
+// Retain the last verified scene during a gap, but never request another delta
+// against a revision that the server/client could not reconcile.
+export function createLiveSession(){
+ let current,reset=false;
+ return {
+  current:()=>current,
+  revision:()=>current&&!reset?revisionOf(current):undefined,
+  fail(){reset=true;},
+  accept(status,message){
+   try{
+    if(status===304){if(!current||reset)throw Error('Full snapshot required');return current;}
+    if(status!==200)throw Error('Capture unavailable');
+    const next=applyEnvelope(current,message);current=next;reset=false;return next;
+   }catch(error){reset=true;throw error;}
+  }
+ };
+}
