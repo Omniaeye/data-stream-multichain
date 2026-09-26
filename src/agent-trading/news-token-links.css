@@ -12,3 +12,5 @@
 @media(max-width:600px){.news-token-links{left:16px;right:16px;top:72px}.news-token-links h2{font-size:8px}.news-token-stories{max-height:110px}.news-token-stories article{gap:9px}.news-linked-nuclei{max-width:92px}.news-linked-nuclei button{max-width:90px;font-size:7px}.news-author{font-size:9px;gap:5px}.news-author-followers{font-size:6px}.news-author img,.news-author-placeholder{width:15px;height:15px}}
 @media(max-height:700px){.news-token-stories{max-height:95px}.news-token-stories article{padding-top:8px;padding-bottom:8px}.news-token-links>header{padding-bottom:7px}}
 @media(max-width:779px) and (max-height:700px){.news-token-links{top:64px}.news-token-stories{max-height:65px}.news-token-story>a{-webkit-line-clamp:1}.news-token-stories article{padding:6px 4px 6px 0}}
+/* Leave a clear gap above the first network port, including embedded views. */
+@media(min-width:780px){.news-token-stories{max-height:clamp(72px,calc(39dvh - 156px),224px)}}
