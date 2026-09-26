@@ -9,7 +9,7 @@ import {DataStream} from './DataStream';
 import {appendGroupedStream,type GroupedStream} from './field-families';
 import {createStreamPacer} from './stream-pacer';
 import {trackedSocialKeys} from './social-trace';
-import {sceneCohort} from './scene-cohort';
+import {sceneCohort,captureSceneClock} from './scene-cohort';
 import {TokenArrivalNotice} from './TokenArrivalNotice';
 import {TokenHoverCard} from './TokenHoverCard';
 import {NewsTokenLinks} from './NewsTokenLinks';
@@ -41,12 +41,14 @@ export function AttractorPreview({capture,connectionError,arrivalHistoryKey}:{ca
   return retained.current;
  },[capture,rosterTick]);
 
- // Also expire stale ranking eligibility when the connection stops updating.
+ // Retain the last observed universe during a gap, with its original time.
  const cohortTick=Math.floor(Date.now()/5000);
+ const sceneClock=captureSceneClock(capture);
+ const delayed=connectionError||sceneClock.stale;
  const tracked=useMemo(()=>trackedSocialKeys(news.snapshot?.links??[],news.now),[news.snapshot,news.now]);
- const visible=useMemo(()=>sceneCohort(tokens,{view,hours:24,quality:true,trackedKeys:tracked}),[tokens,view,cohortTick,tracked]);
+ const visible=useMemo(()=>sceneCohort(tokens,{view,hours:24,quality:true,trackedKeys:tracked,now:sceneClock.now}),[tokens,view,cohortTick,tracked,sceneClock.stale]);
  const visibleKeys=useMemo(()=>visible.map(tokenKey),[visible]);
- const eligibleKeys=useMemo(()=>view==='global'?visibleKeys:sceneCohort(tokens,{quality:true}).map(tokenKey),[tokens,view,cohortTick,visibleKeys]);
+ const eligibleKeys=useMemo(()=>view==='global'?visibleKeys:sceneCohort(tokens,{quality:true,now:sceneClock.now}).map(tokenKey),[tokens,view,cohortTick,visibleKeys,sceneClock.stale]);
  function locateToken(key:string){if(!visibleKeys.includes(key))setView('global');focusRequest.current=key;setSelected(key);setBrain(null);}
  useEffect(()=>{if(!host.current)return;previous.current=undefined;pacer.current=createStreamPacer();setStream({rows:[],total:0,byChain:{}});const scene=createUniverse(host.current,key=>{setSelected(key);setBrain(null);},()=>setError(true),(_zone,inspection)=>{setSelected(null);setBrain(inspection);},{session:tradingSession,onEvent:event=>setTradingRows(rows=>mergeTradingRow(rows,event))});engine.current=scene;
   let listGroups: ReturnType<typeof pacer.current.take>=[],lastListPaint=0,lastReport=0,lastTick=performance.now();
@@ -87,7 +89,7 @@ export function AttractorPreview({capture,connectionError,arrivalHistoryKey}:{ca
  useEffect(()=>{if(document.hidden){previous.current=undefined;return;}const route=routeCapturedData(previous.current,capture,tokens.map(tokenKey));pacer.current.add(route,performance.now(),capture?.sources);previous.current=capture;},[capture,tokens]);
  useEffect(()=>{const close=(event:KeyboardEvent)=>{if(event.key==='Escape'){setSelected(null);setBrain(null);setStreamOpen(false);}};window.addEventListener('keydown',close);return()=>window.removeEventListener('keydown',close);},[]);
  return <main className="attractor-page with-data-stream" data-trace={tracing} data-view={view}><div className="attractor-field" ref={host}/>
-  <DataStream open={streamOpen} onClose={()=>setStreamOpen(false)} value={stream} globalStats={capture?.globalStats} sources={capture?.sources} presentation={capture?.presentation} connectionError={connectionError} onSelectDatum={datum=>engine.current?.selectDatum(datum)}/>
+  <DataStream open={streamOpen} onClose={()=>setStreamOpen(false)} value={stream} globalStats={capture?.globalStats} sources={capture?.sources} presentation={capture?.presentation} connectionError={delayed} onSelectDatum={datum=>engine.current?.selectDatum(datum)}/>
   {streamOpen&&<button className="stream-backdrop" aria-label="Close data stream" onClick={()=>setStreamOpen(false)}/>}
   <nav className="scene-modes" aria-label="Market universe">
    <button className="stream-launch" aria-label="Open data stream" aria-expanded={streamOpen} aria-controls="incoming-data-stream" onClick={()=>setStreamOpen(value=>!value)}><ObservatoryEye/><span>Data stream</span></button>
@@ -98,8 +100,8 @@ export function AttractorPreview({capture,connectionError,arrivalHistoryKey}:{ca
   <TokenArrivalNotice tokens={capture?.tokens??[]} visibleKeys={visibleKeys} eligibleKeys={eligibleKeys} news={news} historyKey={arrivalHistoryKey} onArrival={keys=>engine.current?.highlightTokens(keys)} onSelect={key=>{setTracing(true);locateToken(key);}}/>
   {capture?.mode!=='fixture'&&<NewsTokenLinks tokens={visible} news={news} onSelect={locateToken}/>}
   <TradingLedger rows={tradingRows} disconnected={tradingError}/>
-  {view==='discovery'&&!visible.length&&!connectionError&&<p className="attractor-state">No new tokens meet the current activity filters.</p>}
-  {(error||!tokens.length||connectionError)&&<p className="attractor-state">{error?'Particle rendering unavailable on this device.':connectionError?'Connection interrupted · last received data retained':'Waiting for network captures…'}</p>}
+  {view==='discovery'&&!visible.length&&!delayed&&<p className="attractor-state">No new tokens meet the current activity filters.</p>}
+  {(error||!tokens.length||delayed)&&<p className="attractor-state">{error?'Particle rendering unavailable on this device.':delayed?'Updates delayed · last capture retained':'Waiting for network captures…'}</p>}
   {brain&&<BrainDetails value={brain} onClose={()=>setBrain(null)}/>}
   <TokenHoverCard host={host} tokens={tokens} capture={capture} visibleKeys={visibleKeys} selected={selected} onSelectedChange={setSelected} news={news} tracing={tracing} onCloseTrace={()=>setTracing(false)}/>
  </main>;
