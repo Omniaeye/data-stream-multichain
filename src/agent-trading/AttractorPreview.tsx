@@ -26,7 +26,7 @@ export function AttractorPreview({capture,connectionError,arrivalHistoryKey}:{ca
  const [tradingSession]=useState(createTradingFeed);
  const [tradingRows,setTradingRows]=useState<TradingEvent[]>([]),[tradingError,setTradingError]=useState(false);
  const host=useRef<HTMLDivElement>(null),engine=useRef<ReturnType<typeof createUniverse>|null>(null),retained=useRef<Token[]>([]);
- const [view,setView]=useState('global'),[streamOpen,setStreamOpen]=useState(false);
+ const [view,setView]=useState('discovery'),[streamOpen,setStreamOpen]=useState(false);
  const [tracing,setTracing]=useState(false),focusRequest=useRef<string|null>(null);
  const news=useNewsSnapshot(!!capture&&capture.mode!=='fixture');
  const [selected,setSelected]=useState<string|null>(null),[paused,setPaused]=useState(false),[error,setError]=useState(false);
