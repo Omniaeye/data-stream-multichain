@@ -33,7 +33,6 @@ export function TradingLedger({rows,disconnected}:{rows:TradingEvent[];disconnec
  },[rows]);
  return <section className="jev-ledger" aria-label="JEV trading activity">
   <header><span className="jev-ledger-port" aria-hidden="true"/><h2>JEV TRADING</h2><span className="jev-ledger-beta">PREVIEW BETA</span>{disconnected&&<small role="status">Reconnecting</small>}<span className="jev-ledger-open"><i/>{rows.filter(row=>row.status==='open').length}/10 OPEN</span><small>{rows.length}/100</small></header>
-  <p className="jev-ledger-context">Illustrative activity · no live orders</p>
   <div className="jev-ledger-columns" aria-hidden="true"><span>TIME</span><span>POSITION</span><span>CHAIN</span><span>ACTION</span><span>STATE</span><span>RESULT</span></div>
   <div className="jev-ledger-scroll" ref={scroll} onScroll={remember} tabIndex={0} aria-label="Last 100 trading positions">
    {!rows.length&&<div className="jev-ledger-wait"><i/>JEV <span>• • •</span></div>}
