@@ -27,7 +27,7 @@ export function AttractorPreview({capture,connectionError,arrivalHistoryKey}:{ca
  const [tradingRows,setTradingRows]=useState<TradingEvent[]>([]),[tradingError,setTradingError]=useState(false);
  const host=useRef<HTMLDivElement>(null),engine=useRef<ReturnType<typeof createUniverse>|null>(null),retained=useRef<Token[]>([]);
  const [view,setView]=useState('discovery'),[streamOpen,setStreamOpen]=useState(false);
- const [tracing,setTracing]=useState(true),focusRequest=useRef<string|null>(null);
+ const tracing=true,focusRequest=useRef<string|null>(null);
  const news=useNewsSnapshot(!!capture&&capture.mode!=='fixture');
  const [selected,setSelected]=useState<string|null>(null),[paused,setPaused]=useState(false),[error,setError]=useState(false);
  const [brain,setBrain]=useState<BrainInspection|null>(null),previous=useRef<Capture|undefined>(undefined);
@@ -95,14 +95,14 @@ export function AttractorPreview({capture,connectionError,arrivalHistoryKey}:{ca
    <button className="stream-launch" aria-label="Open data stream" aria-expanded={streamOpen} aria-controls="incoming-data-stream" onClick={()=>setStreamOpen(value=>!value)}><ObservatoryEye/><span>Data stream</span></button>
    <div className="scene-view-switch"><button title="Active tokens, ordered by their first arrival in the feed" aria-pressed={view==='discovery'} onClick={()=>setView('discovery')}>Trending <small>NEW</small></button><button title="All eligible tokens in one view; larger circles mean larger market cap" aria-pressed={view==='global'} onClick={()=>setView('global')}>Global</button></div>
    <span className="scene-jev-trading" aria-label="JEV Trading AI, preview beta"><b>JEV TRADING AI</b><small>PREVIEW BETA</small></span>
-   <div className="scene-tools"><button className="attractor-trace" aria-label="Social trace" title="Social trace" aria-pressed={tracing} onClick={()=>setTracing(value=>!value)}><SceneIcon kind="trace"/></button><button className="attractor-reset" aria-label="Reset view" title="Reset view" onClick={()=>engine.current?.resetView()}><SceneIcon kind="reset"/></button><button className="attractor-pause" aria-label={paused?'Resume motion':'Pause motion'} title={paused?'Resume motion':'Pause motion'} aria-pressed={paused} onClick={()=>{if(paused)pacer.current.resume(performance.now());motionFrozen.current=!paused;setPaused(!paused);engine.current?.pause(!paused);}}><SceneIcon kind={paused?'play':'pause'}/></button></div>
+   <div className="scene-tools"><button className="attractor-trace" aria-label="Social trace always on" title="Social trace always on" aria-pressed={tracing} disabled style={{cursor:'default'}}><SceneIcon kind="trace"/></button><button className="attractor-reset" aria-label="Reset view" title="Reset view" onClick={()=>engine.current?.resetView()}><SceneIcon kind="reset"/></button><button className="attractor-pause" aria-label={paused?'Resume motion':'Pause motion'} title={paused?'Resume motion':'Pause motion'} aria-pressed={paused} onClick={()=>{if(paused)pacer.current.resume(performance.now());motionFrozen.current=!paused;setPaused(!paused);engine.current?.pause(!paused);}}><SceneIcon kind={paused?'play':'pause'}/></button></div>
   </nav>
-  <TokenArrivalNotice tokens={capture?.tokens??[]} visibleKeys={visibleKeys} eligibleKeys={eligibleKeys} news={news} historyKey={arrivalHistoryKey} onArrival={keys=>engine.current?.highlightTokens(keys)} onSelect={key=>{setTracing(true);locateToken(key);}}/>
+  <TokenArrivalNotice tokens={capture?.tokens??[]} visibleKeys={visibleKeys} eligibleKeys={eligibleKeys} news={news} historyKey={arrivalHistoryKey} onArrival={keys=>engine.current?.highlightTokens(keys)} onSelect={locateToken}/>
   {capture?.mode!=='fixture'&&<NewsTokenLinks tokens={visible} news={news} onSelect={locateToken}/>}
   <TradingLedger rows={tradingRows} disconnected={tradingError}/>
   {view==='discovery'&&!visible.length&&!delayed&&<p className="attractor-state">No new tokens meet the current activity filters.</p>}
   {(error||!tokens.length||delayed)&&<p className="attractor-state">{error?'Particle rendering unavailable on this device.':delayed?'Updates delayed · last capture retained':'Waiting for network captures…'}</p>}
   {brain&&<BrainDetails value={brain} onClose={()=>setBrain(null)}/>}
-  <TokenHoverCard host={host} tokens={tokens} capture={capture} visibleKeys={visibleKeys} selected={selected} onSelectedChange={setSelected} news={news} tracing={tracing} onCloseTrace={()=>setTracing(false)}/>
+  <TokenHoverCard host={host} tokens={tokens} capture={capture} visibleKeys={visibleKeys} selected={selected} onSelectedChange={setSelected} news={news} tracing={tracing}/>
  </main>;
 }

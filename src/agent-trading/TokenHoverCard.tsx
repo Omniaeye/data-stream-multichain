@@ -19,11 +19,12 @@ function Glyph({kind}:{kind:'copy'|'pin'|'close'}){
  return <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.3" aria-hidden="true">{kind==='copy'?<><rect x="6.5" y="6.5" width="10" height="10" rx="2"/><path d="M12.5 6.5v-3h-9v9h3"/></>:kind==='pin'?<path d="M7 3h6l-1 6 3 3H5l3-3-1-6ZM10 12v5"/>:<path d="m5 5 10 10M15 5 5 15"/>}</svg>;
 }
 
-export function TokenHoverCard({host,tokens,visibleKeys,selected,onSelectedChange,capture,news,tracing=false,onCloseTrace}:{host:RefObject<HTMLDivElement|null>;tokens:Token[];visibleKeys:string[];selected:string|null;onSelectedChange:(key:string|null)=>void;capture?:Capture;news?:ReturnType<typeof useNewsSnapshot>;tracing?:boolean;onCloseTrace?:()=>void}){
+export function TokenHoverCard({host,tokens,visibleKeys,selected,onSelectedChange,capture,news,tracing=true}:{host:RefObject<HTMLDivElement|null>;tokens:Token[];visibleKeys:string[];selected:string|null;onSelectedChange:(key:string|null)=>void;capture?:Capture;news?:ReturnType<typeof useNewsSnapshot>;tracing?:boolean}){
  const [hovered,setHovered]=useState<string|null>(null),[closing,setClosing]=useState(false),[copied,setCopied]=useState(false);
  const card=useRef<HTMLElement>(null),tip=useRef<HTMLSpanElement>(null),anchor=useRef<HTMLElement|null>(null),closeTimer=useRef<ReturnType<typeof setTimeout>|undefined>(undefined);
  const id=useId(),key=selected??hovered,token=tokens.find(t=>tokenKey(t)===key),visible=!!key&&visibleKeys.includes(key);
- const links=tracing&&key?(news?.snapshot?.links??[]).filter(link=>trackedSocialKeys([link],news?.now).has(key)).map(link=>({...link,evidence:link.evidence.filter(ref=>ref.tokenKey===key)})):[];
+ const [traceDismissed,setTraceDismissed]=useState(false);
+ const links=tracing&&!traceDismissed&&key?(news?.snapshot?.links??[]).filter(link=>trackedSocialKeys([link],news?.now).has(key)).map(link=>({...link,evidence:link.evidence.filter(ref=>ref.tokenKey===key)})):[];
  const clearClose=()=>{clearTimeout(closeTimer.current);setClosing(false);};
  const close=()=>{clearTimeout(closeTimer.current);setHovered(null);onSelectedChange(null);setClosing(false);};
  const leave=()=>{if(selected)return;clearTimeout(closeTimer.current);closeTimer.current=setTimeout(()=>{setClosing(true);closeTimer.current=setTimeout(()=>{setHovered(null);setClosing(false);},140);},180);};
@@ -37,7 +38,7 @@ export function TokenHoverCard({host,tokens,visibleKeys,selected,onSelectedChang
   return()=>{el.removeEventListener('pointerover',enter);el.removeEventListener('pointerout',exit);el.removeEventListener('focusin',enter);el.removeEventListener('focusout',exit);clearTimeout(closeTimer.current);};
  },[host]);
  useEffect(()=>{if(key&&(!token||!visible)){clearTimeout(closeTimer.current);setHovered(null);onSelectedChange(null);}},[key,token,visible,onSelectedChange]);
- useEffect(()=>{setCopied(false);setClosing(false);},[key]);
+ useEffect(()=>{setCopied(false);setClosing(false);setTraceDismissed(false);},[key]);
  useEffect(()=>{
   const escape=(event:KeyboardEvent)=>{if(event.key==='Escape')close();};
   document.addEventListener('keydown',escape);return()=>document.removeEventListener('keydown',escape);
@@ -75,6 +76,6 @@ export function TokenHoverCard({host,tokens,visibleKeys,selected,onSelectedChang
    <dl className="token-hover-metrics">{metrics.map(([field,label])=><div key={field} data-metric={field}><dt>{label}</dt><dd title={metric(field)}>{metric(field,true)}</dd></div>)}</dl>
    <footer><button className="token-hover-address" title={token.id} aria-label="Copy token address" onClick={()=>{void navigator.clipboard.writeText(token.id).then(()=>setCopied(true)).catch(()=>setCopied(false));}}><span>{copied?'Copied':token.id.slice(0,6)+'…'+token.id.slice(-4)}</span><Glyph kind="copy"/></button><span className="token-hover-window">{window?window+' window':'Captured data'}</span></footer>
   </div>
-  {links.length>0&&<TokenTracePanel links={links} onClose={()=>onCloseTrace?.()}/>}
+  {links.length>0&&<TokenTracePanel links={links} onClose={()=>setTraceDismissed(true)}/>}
  </aside>;
 }
