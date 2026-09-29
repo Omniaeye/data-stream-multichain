@@ -34,6 +34,15 @@ export function applyEnvelope(current,message){
  validateTokens(result.tokens);
  if(result.batches){if(!Array.isArray(result.batches)||result.batches.length>18)throw new Error('Invalid batches');for(const batch of result.batches){validateTokens(batch.tokens);if(!batch.captureId||!batch.captureHash||batch.batches)throw new Error('Invalid batch evidence');}}
  if(result.presentation){const p=result.presentation;if(p.periodMs!==15000||(p.durationMs!==undefined&&(!Number.isFinite(p.durationMs)||p.durationMs<1000||p.durationMs>15000))||!Number.isFinite(Date.parse(p.publishedAt))||!Number.isFinite(Date.parse(p.startedAt))||(p.startsAt&&!Number.isFinite(Date.parse(p.startsAt)))||!['complete','partial'].includes(p.status)||!Array.isArray(p.missing)||p.missing.length>6||p.expectedSources!==6||!Number.isInteger(p.sourceCount)||p.sourceCount<1||p.sourceCount>6)throw new Error('Invalid collection cycle');}
+ if(result.delivery){
+  const d=result.delivery,r=message.recovery;
+  if(!d||typeof d.epoch!=='string'||!/^[a-f0-9-]{36}$/.test(d.epoch)||!Number.isSafeInteger(d.sequence)||d.sequence<1||!Number.isSafeInteger(d.publication)||d.publication<1||!Number.isSafeInteger(d.page)||!Number.isSafeInteger(d.pages)||d.page<1||d.page>d.pages||d.sequence!==d.publication+d.page-1||typeof d.sourceRevision!=='string'||d.sourceRevision.length>200)throw new Error('Invalid delivery page');
+  if(!r||!['initial','continuous','reset'].includes(r.status)||r.status==='reset'&&!['cursor_expired','history_incomplete'].includes(r.reason))throw new Error('Invalid recovery status');
+  if(r.status==='continuous'){
+   const old=current?.delivery;
+   if(!old||d.epoch!==old.epoch||(d.sequence!==old.sequence+1&&!(d.sequence===old.sequence&&revisionOf(result)===revisionOf(current))))throw new Error('Delivery gap');
+  }
+ }
  if(revisionOf(result)!==message.revision)throw new Error('Invalid revision');
  return result;
 }
@@ -42,16 +51,17 @@ export const retryDelay = (failures,random=Math.random) => failures===0?5000:Mat
 // Retain the last verified scene during a gap, but never request another delta
 // against a revision that the server/client could not reconcile.
 export function createLiveSession(){
- let current,reset=false;
+ let current,recovery,reset=false;
  return {
   current:()=>current,
+  recovery:()=>recovery,
   revision:()=>current&&!reset?revisionOf(current):undefined,
   fail(){reset=true;},
   accept(status,message){
    try{
     if(status===304){if(!current||reset)throw Error('Full snapshot required');return current;}
     if(status!==200)throw Error('Capture unavailable');
-    const next=applyEnvelope(current,message);current=next;reset=false;return next;
+    const next=applyEnvelope(current,message);current=next;recovery=message.recovery;reset=false;return next;
    }catch(error){reset=true;throw error;}
   }
  };
