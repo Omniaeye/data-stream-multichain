@@ -6,23 +6,29 @@ export function counterAt(stats,now=Date.now()){
  return Math.min(stats.total,Math.floor(w.from+(w.to-w.from)*elapsed/w.duration));
 }
 
-// Independent network windows ensure the total equals its parts.
-function activeWindow(stats,chain,now){
+// Late releases can overlap. Add each release's progress instead of treating
+// the previous target as already presented when the next window starts.
+function networkWindows(stats,chain){
  const timeline=stats?.networkTimelines?.[chain];
- return timeline?.length?(timeline.findLast(w=>w.start<=now)??timeline[0]):stats?.networkWindows?.[chain];
+ return timeline?.length?timeline:stats?.networkWindows?.[chain]?[stats.networkWindows[chain]]:[];
 }
 export function networkCounterAt(stats,chain,now=Date.now()){
- const total=stats?.byChain?.[chain]??0,w=activeWindow(stats,chain,now);
- return w?counterAt({total,displayWindow:w},now):total;
+ const total=stats?.byChain?.[chain]??0,windows=networkWindows(stats,chain);
+ if(!windows.length)return total;
+ const presented=windows.reduce((sum,w)=>sum+(w.to-w.from)*Math.max(0,Math.min(w.duration,now-w.start))/w.duration,windows[0].from);
+ return Math.min(total,Math.floor(presented));
 }
 export function totalCounterAt(stats,now=Date.now()){
  return stats?.networkWindows||stats?.networkTimelines?Object.keys(stats.byChain).reduce((sum,chain)=>sum+networkCounterAt(stats,chain,now),0):counterAt(stats,now);
 }
 export function lastPresentedAt(stats,chain,now=Date.now()){
- const w=activeWindow(stats,chain,now);
- if(!w||w.to<=w.from||now<w.start)return null;
- const presented=Math.floor(Math.min(1,(now-w.start)/w.duration)*(w.to-w.from));
- return presented>0?w.start+presented/(w.to-w.from)*w.duration:null;
+ let latest=null;
+ for(const w of networkWindows(stats,chain)){
+  if(w.to<=w.from||now<w.start)continue;
+  const presented=Math.floor(Math.min(1,(now-w.start)/w.duration)*(w.to-w.from));
+  if(presented>0)latest=Math.max(latest??-Infinity,w.start+presented/(w.to-w.from)*w.duration);
+ }
+ return latest;
 }
 export function elapsedLabel(ms){
  if(!Number.isFinite(ms))return '—';
