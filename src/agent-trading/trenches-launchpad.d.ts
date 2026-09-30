@@ -1,0 +1,15 @@
+import type {Token} from './AgentTradingJev';
+export type Launchpad={id:string;label:string;field:string;raw:string};
+export function tokenLaunchpad(token:Token):Launchpad|null;
+export type LaunchpadOption={id:string;label:string;mark:string;chains:string[]};
+export type LaunchpadPreferences={launchpads:string[]|null;launchpadsByChain?:Record<string,string[]|null>};
+export const launchpadNetworks:string[];
+export function networkLaunchpads(prefs:LaunchpadPreferences,chain:string):string[]|null;
+export function matchesNetworkLaunchpad(token:Token,prefs:LaunchpadPreferences):boolean;
+export function launchpadBlockKey(token:Token):string|null;
+export function validLaunchpadBlockKey(key:unknown):boolean;
+export function launchpadKey(token:Token):string;
+export function launchpadOptions(tokens?:Token[]):LaunchpadOption[];
+export function validLaunchpadKey(key:unknown):boolean;
+export function matchesLaunchpad(token:Token,selected?:string[]|null):boolean;
+export function toggleLaunchpad(selected:string[]|null,id:string,options:LaunchpadOption[]):string[]|null;
