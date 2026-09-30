@@ -4,4 +4,4 @@ export type TokenActivity={window:string;receivedAt?:string;volume:number|null;s
 export function firstFeedAge(token:Token,now?:number):number|null;
 export function sourceAge(token:Token,now?:number):number|null;
 export function tokenActivity(token:Token,now?:number):TokenActivity|null;
-export function tokenEligibility(token:Token,now?:number):{eligible:boolean;reason:string|null;intro:boolean;activity:TokenActivity|null};
+export function tokenEligibility(token:Token,now?:number,observationNow?:number):{eligible:boolean;reason:string|null;intro:boolean;activity:TokenActivity|null};

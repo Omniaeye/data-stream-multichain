@@ -25,14 +25,14 @@ export function tokenActivity(token,now=Date.now()){
  if(age!==null&&age<TOKEN_ACTIVITY_POLICY.introMs&&fresh(at,now))return {window:'24h · new launch',receivedAt:at,volume:fields('volume_24h'),liquidity:fields('liquidity'),swaps:fields('swaps_24h')??sum(fields('buys_24h'),fields('sells_24h')),buys:fields('buys_24h'),sells:fields('sells_24h')};
  return null;
 }
-export function tokenEligibility(token,now=Date.now()){
+export function tokenEligibility(token,now=Date.now(),observationNow=now){
  const p=TOKEN_ACTIVITY_POLICY,cap=numericField(token,'market_cap'),age=firstFeedAge(token,now),intro=age!==null&&age<p.introMs;
- const result=reason=>({eligible:reason===null,reason,intro,activity:tokenActivity(token,now)});
+ const result=reason=>({eligible:reason===null,reason,intro,activity:tokenActivity(token,observationNow)});
  if(cap===null||cap<p.introCap)return result('market_cap');
  if(!intro&&cap<=p.matureCap)return result('intro_expired');
  if(token.fields.some(f=>['is_honeypot','is_wash_trading'].includes(f.key)&&[true,1,'1','true'].includes(f.value)))return result('source_risk_flag');
- if(!fresh(token.evidence?.receivedAt,now))return result('stale_capture');
- const activity=tokenActivity(token,now);
+ if(!fresh(token.evidence?.receivedAt,observationNow))return result('stale_capture');
+ const activity=tokenActivity(token,observationNow);
  if(!activity)return result('activity_unavailable');
  if(activity.liquidity===null||activity.liquidity<p.minLiquidity)return result('liquidity');
  if(activity.volume===null||activity.volume<p.minVolume)return result('volume');
