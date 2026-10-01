@@ -1,7 +1,13 @@
 import type {Capture,Token} from './AgentTradingJev';
+export type SceneCohortOptions={view?:string;hours?:number;minCap?:number;quality?:boolean;trackedKeys?:Set<string>;now?:number;observationNow?:number};
+export type SceneCohortState={retained:Map<string,{observationKey:string;asOf:number;lifecycleAt:number}>;seeded:boolean};
 export function captureSceneClock(capture:Capture|undefined,now?:number):{stale:boolean;now:number};
 export function sourceAge(token:Token,now?:number):number|null;
 export function activeRanking(token:Token,now?:number):boolean;
-export function sceneCohort(tokens:Token[],options?:{view?:string;hours?:number;minCap?:number;quality?:boolean;trackedKeys?:Set<string>;now?:number}):Token[];
-
-export const persistentSceneCohort:typeof sceneCohort;
+export function sceneCohort(tokens:Token[],options?:SceneCohortOptions):Token[];
+export function createSceneCohortState():SceneCohortState;
+export function tokenObservationClock(token:Token,now?:number):{asOf:number|null;stale:boolean};
+export function persistentSceneCohort(tokens:Token[],options?:SceneCohortOptions&{state?:SceneCohortState}):Token[];
+export function seedHistoricalSceneCohortState(tokens:Token[],options:SceneCohortOptions&{state:SceneCohortState}):number;
+export function networkSourceFreshness(sources:Capture['sources'],chain:string,now?:number):{items:{source:NonNullable<Capture['sources']>[number];age:number;stale:boolean}[];age:number;stale:boolean;partial:boolean;missing:string[]};
+export function isTokenSourceDelayed(token:Token,sources:Capture['sources'],now?:number):boolean;
