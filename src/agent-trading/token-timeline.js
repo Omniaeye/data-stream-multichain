@@ -1,14 +1,13 @@
-import {observationSeed} from './observation-organisms.js';
 import {sceneAnchors} from './scene-anchors.js';
 
 export function timelineTime(token){const time=Date.parse(token.firstSeenAt);return Number.isFinite(time)?time:0;}
 export function timelineBounds(width,height,compact,items=[]){
  const anchors=compact?sceneAnchors(width,height,true):null;
- const top=compact?Math.max(height*.64,anchors.trading.y+anchors.trading.height+48):128,bottom=height-24,space=bottom-top;
+ const top=compact?Math.max(height*.64,anchors.trading.y+anchors.trading.height+184):128,bottom=height-24,space=bottom-top;
  const weights=[0,1,2].map(band=>items.filter(t=>t.band===band).reduce((n,t)=>n+(t.radius+8)**2,0)),total=weights.reduce((a,b)=>a+b,0);
  let y=top;
- return weights.map(weight=>{const height=space*(total ? .16+.52*weight/total : 1/3),bound={x:compact?16:width*.50,y,
-  width:compact?width-32:width*.48,height:height-(compact?8:18)};y+=height;return bound;});
+ return weights.map(weight=>{const height=space*(total ? .16+.52*weight/total : 1/3),bound={x:compact?16:width*.58,y,
+  width:compact?width-32:width*.40,height:height-(compact?8:18)};y+=height;return bound;});
 }
 
 // Columns are ordered by first observation, newest to oldest. Vertical packing
@@ -21,7 +20,8 @@ export function packTokenTimeline(items,bounds,{labels=false,scroll=false,unifie
   const gap=compact?8:Math.max(labels?12:2,22*scale),points=new Map();let fits=true,contentWidth=0;
   for(let band=0;band<bands.length;band++){
    const b=bounds[band],columns=[];let column=[],height=0;
-   const footprint=item=>item.radius*scale*2+(labels?34:0)+(item.arriving?22:0);
+   // Caption space includes the NEW line, even after that marker expires.
+   const footprint=item=>item.radius*scale*2+(labels?42:0);
    for(const item of bands[band]){
     const diameter=footprint(item);
     if(diameter>b.height){fits=false;break;}
@@ -33,12 +33,13 @@ export function packTokenTimeline(items,bounds,{labels=false,scroll=false,unifie
    if(used>b.width&&!scroll){fits=false;break;}
    contentWidth=Math.max(contentWidth,used);
    // Let sparse fields breathe; dense fields keep a shared radius scale.
-   const horizontal=columns.length>1?gap+(compact?0:Math.max(0,Math.min(34,(b.width-used)/(columns.length-1)))):gap;
+   const horizontal=columns.length>1?gap+Math.max(0,(b.width-used)/(columns.length-1)):gap;
    let x=b.x;
    columns.forEach((c,i)=>{
     const usedHeight=c.reduce((n,t)=>n+footprint(t),0)+gap*(c.length-1),free=b.height-usedHeight;
-    let y=b.y+free*(.25+observationSeed(c[0].key)*.5);
-    for(const item of c){const radius=item.radius*scale;points.set(item.key,{x:x+widths[i]/2,y:y+radius,radius,band:item.band});y+=footprint(item)+gap;}
+    let y=b.y+(c.length===1?free/2:0);
+    const vertical=gap+(c.length>1?free/(c.length-1):0);
+    for(const item of c){const radius=item.radius*scale;points.set(item.key,{x:x+widths[i]/2,y:y+radius,radius,band:item.band});y+=footprint(item)+vertical;}
     x+=widths[i]+horizontal;
    });
   }

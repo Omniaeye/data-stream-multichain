@@ -33,7 +33,7 @@ export function authorProfile(event){
 export function trackedSocialKeys(links,now=Date.now()){
  const keys=new Set();
  for(const {event,evidence} of links??[]){const at=Date.parse(event.publishedAt);if(!socialPlatforms.has(event.platform)||!Number.isFinite(at)||at>now||now-at>10800000)continue;
-  for(const ref of evidence??[])if(ref.captureId&&ref.captureHash)keys.add(ref.tokenKey);
+  for(const ref of evidence??[])if(ref.match!=='author_profile'&&ref.kind!=='profile'&&ref.captureId&&ref.captureHash)keys.add(ref.tokenKey);
  }
  return keys;
 }
