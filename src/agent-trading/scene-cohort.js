@@ -12,14 +12,27 @@ export function activeRanking(token,now=Date.now()){
  const r=token.ranking,age=now-Date.parse(r?.receivedAt);
  return !!r&&r.window==='5m'&&Number.isFinite(age)&&age>=-2000&&age<=45000&&r.swaps>0&&r.volume>0&&r.liquidity>0;
 }
-export function sceneCohort(tokens,{view='global',hours=24,minCap=0,quality=false,trackedKeys=new Set(),now=Date.now()}={}){
+// Keep a bounded view of each source's last valid observation independently.
+// A newer capture on Solana must not erase an otherwise unchanged BSC token.
+export function persistentSceneCohort(tokens,options={}){
+ const now=options.now??Date.now();
+ return tokens.filter(token=>{
+  if(sceneCohort([token],{...options,now}).length)return true;
+  const reason=tokenEligibility(token,now).reason,received=Date.parse(token.evidence?.receivedAt);
+  if(!['stale_capture','activity_unavailable'].includes(reason)||!Number.isFinite(received)||now-received>180000)return false;
+  const ranked=Date.parse(token.ranking?.receivedAt),at=Number.isFinite(ranked)?Math.min(received,ranked+40000):received;
+  return sceneCohort([token],{...options,now,observationNow:at}).length>0;
+ }).sort(cohortOrder(options.view??'global',now));
+}
+const cohortOrder=(view,now)=>(a,b)=>view==='global'?0:(b.ranking?.swaps??0)-(a.ranking?.swaps??0)||sourceAge(a,now)-sourceAge(b,now)||tokenKey(a).localeCompare(tokenKey(b));
+export function sceneCohort(tokens,{view='global',hours=24,minCap=0,quality=false,trackedKeys=new Set(),now=Date.now(),observationNow=now}={}){
  return tokens.filter(t=>{
   if(minCap>0&&(numericField(t,'market_cap')??-1)<=minCap)return false;
-  const eligibility=quality?tokenEligibility(t,now):null;
+  const eligibility=quality?tokenEligibility(t,now,observationNow):null;
   if(eligibility&&!eligibility.eligible)return false;
   if(trackedKeys.has(tokenKey(t)))return true;
   const age=sourceAge(t,now);
-  return view==='global'||eligibility?.intro||age!==null&&age<=hours*3600000&&activeRanking(t,now);
+  return view==='global'||eligibility?.intro||age!==null&&age<=hours*3600000&&activeRanking(t,observationNow);
  // Both comparisons use the same explicit 5m ranking window.
- }).sort((a,b)=>view==='global'?0:(b.ranking?.swaps??0)-(a.ranking?.swaps??0)||sourceAge(a,now)-sourceAge(b,now)||tokenKey(a).localeCompare(tokenKey(b)));
+ }).sort(cohortOrder(view,now));
 }
