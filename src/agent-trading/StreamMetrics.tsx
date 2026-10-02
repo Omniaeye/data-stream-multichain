@@ -7,11 +7,11 @@ const names=['Robinhood Chain','BSC','Solana'];
 const format=new Intl.NumberFormat('en-US');
 
 // Paint counters independently of React's virtual list. No timer creates data.
-export function StreamMetrics({stats,sources,total,byChain,connectionError=false}:{stats?:GlobalFieldStats;sources?:Capture['sources'];total:number;byChain:Record<string,number>;connectionError?:boolean}){
- const root=useRef<HTMLDivElement>(null),latest=useRef({stats,sources,total,byChain,connectionError});latest.current={stats,sources,total,byChain,connectionError};
+export function StreamMetrics({stats,sources,total,byChain,connectionError=false,captureStale=false,viewOnly=false}:{stats?:GlobalFieldStats;sources?:Capture['sources'];total:number;byChain:Record<string,number>;connectionError?:boolean;captureStale?:boolean;viewOnly?:boolean}){
+ const root=useRef<HTMLDivElement>(null),latest=useRef({stats,sources,total,byChain,connectionError,captureStale,viewOnly});latest.current={stats,sources,total,byChain,connectionError,captureStale,viewOnly};
  useEffect(()=>{let frame=0;const count=root.current?.querySelector<HTMLElement>('[data-total-count]'),ports=Array.from(root.current?.querySelectorAll<HTMLElement>('[data-chain]')??[]);
   function paint(){
-   const {stats,sources,total,byChain,connectionError}=latest.current,now=Date.now();
+   const {stats,sources,total,byChain,connectionError,captureStale,viewOnly}=latest.current,now=Date.now();
    if(count){count.textContent=format.format(stats?totalCounterAt(stats,now):total);count.dataset.globalFields=String(stats?.total??total);}
    for(const [i,port] of ports.entries()){
     const chain=chains[i],networkSources=sources?.filter(s=>s.chain===chain)??[],source=networkSources.slice().sort((a,b)=>Date.parse(b.receivedAt)-Date.parse(a.receivedAt))[0];
@@ -19,8 +19,8 @@ export function StreamMetrics({stats,sources,total,byChain,connectionError=false
     const delivered=stats?lastPresentedAt(stats,chain,now):null,elapsed=delivered===null?Infinity:Math.max(0,now-delivered);
     port.querySelector('b')!.textContent=format.format(stats?networkCounterAt(stats,chain,now):byChain[chain]??0);
     const stale=!!source&&age>cadence*2+10000;
-    port.querySelector('small')!.textContent=connectionError?'Reconnecting':stale?'Stale':delivered===null?'Waiting':'Δ '+elapsedLabel(elapsed);
-    port.dataset.stale=String(connectionError||stale);
+    port.querySelector('small')!.textContent=connectionError?'Reconnecting':viewOnly?'Syncing':stale||captureStale?'Stale':delivered===null?'Waiting':'Δ '+elapsedLabel(elapsed);
+    port.dataset.stale=String(connectionError||stale||captureStale||viewOnly);
     // Source time remains available; presentation precision is not ingest latency.
     port.title=names[i]+' · Last presented data point '+elapsedLabel(elapsed)+' ago · Capture age '+elapsedLabel(age)+' · '+networkSources.map(s=>(s.endpoint==='trenches'?'Launches':'Ranking')+' every '+((s.cadenceMs??0)/1000).toFixed(0)+'s'+(s.measuredCadenceMs?' (measured '+(s.measuredCadenceMs/1000).toFixed(1)+'s)':'')).join(' / ');
    }
