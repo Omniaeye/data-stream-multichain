@@ -2,19 +2,39 @@
 // Local inverse-square attraction + curl adapts the MIT Three.js attractor field.
 import * as THREE from 'three/webgpu';
 import {Fn,If,Loop,float,uint,hash,instanceIndex,instancedArray,instancedBufferAttribute,uniform,uniformArray,vec3,vec4,mix,color,mod,uv} from 'three/tsl';
-import {createOrganismStore,organismStage,PARTICLES_PER_ORGANISM,JOURNEY_SECONDS,RESIDENCE_SECONDS,RESIDENT_FADE_SECONDS} from './observation-organisms.js';
+import {createOrganismStore,organismStage,PARTICLES_PER_ORGANISM,JOURNEY_SECONDS,RESIDENCE_SECONDS,RESIDENT_FADE_SECONDS,RESIDENT_MIN_OPACITY} from './observation-organisms.js';
 import {familyFor,FAMILY_COLORS} from './field-families.js';
 import {CATEGORY_ORDER,journeyPoint} from './flow-path.js';
 import {journeyNode} from './journey-node.js';
 import {createVisibleOrganisms} from './visible-organisms.js';
 const VISIBLE_ORGANISMS=24576;
 
-export function createObservationClouds(scene,renderer,host,brain,visibleKeys){
- const store=createOrganismStore(visibleKeys,VISIBLE_ORGANISMS,{residenceSeconds:RESIDENCE_SECONDS,pacedSpreadSeconds:.12}),featured=new Set(visibleKeys),resources=[],track=r=>(resources.push(r),r);
+export function retargetObservationRoutes(records,keys,pathFor,targets,routeBuffer){
+ if(!keys.size)return false;
+ // Follow moving nuclei without re-ingesting observations or resetting birth.
+ // Only destination coordinates change; each token target is resolved once.
+ const ends=new Map();let changed=false;
+ records.forEach((record,slot)=>{
+  const key=record.datum.tokenKey;if(!keys.has(key))return;
+  if(!ends.has(key))ends.set(key,pathFor(record.datum)[3]);
+  const end=ends.get(key);
+  for(let j=0;j<PARTICLES_PER_ORGANISM;j++)targets.setXYZ(slot*PARTICLES_PER_ORGANISM+j,end.x,end.y,end.z);
+  routeBuffer.addUpdateRange(slot*PARTICLES_PER_ORGANISM*16,PARTICLES_PER_ORGANISM*16);changed=true;
+ });
+ return changed;
+}
+
+// Logical evidence outlives graphics resources within this page only.
+export function createObservationCloudState(visibleKeys=[],capacity=VISIBLE_ORGANISMS){
+ return {store:createOrganismStore(visibleKeys,capacity,{residenceSeconds:RESIDENCE_SECONDS,pacedSpreadSeconds:.12}),time:0,selectedId:null,selectedDatum:null};
+}
+
+export function createObservationClouds(scene,renderer,host,brain,visibleKeys,retainedState){
+ const state=retainedState??createObservationCloudState(visibleKeys),store=state.store,featured=new Set(visibleKeys),resources=[],track=r=>(resources.push(r),r);
  const visible=createVisibleOrganisms();
- const count=VISIBLE_ORGANISMS*PARTICLES_PER_ORGANISM;
+ const count=store.stats(state.time).capacity*PARTICLES_PER_ORGANISM;
  const positions=instancedArray(count,'vec3'),velocities=instancedArray(count,'vec3');
- const clock=uniform(0),physicsStep=uniform(1/60),drawCount=uniform(0),selectedSlot=uniform(-1);
+ const clock=uniform(state.time),physicsStep=uniform(1/60),drawCount=uniform(0),selectedSlot=uniform(-1);
  const geometry=track(new THREE.PlaneGeometry(1,1));
  // Share a single vertex buffer: mobile WebGPU commonly permits only eight.
  const routeBuffer=new THREE.InstancedInterleavedBuffer(new Float32Array(count*16),16).setUsage(THREE.DynamicDrawUsage);
@@ -48,7 +68,8 @@ export function createObservationClouds(scene,renderer,host,brain,visibleKeys){
  material.positionNode=center.add(positions.toAttribute().mul(mix(float(.022),p2.w.mul(.035).add(.004),progress)));
  const palette=uniformArray(CATEGORY_ORDER.map(category=>new THREE.Color(FAMILY_COLORS[category])));
  const tint=palette.element(p3.w.floor().toUint()).mul(velocities.toAttribute().length().div(16).add(.72));
- const fade=float(JOURNEY_SECONDS+RESIDENCE_SECONDS).sub(age).div(RESIDENT_FADE_SECONDS).clamp(0,1);
+ // Captured clouds fade to a quiet resident orbit, never into new incoming data.
+ const fade=float(JOURNEY_SECONDS+RESIDENT_FADE_SECONDS).sub(age).div(RESIDENT_FADE_SECONDS).clamp(RESIDENT_MIN_OPACITY,1);
  // Soft round motes, not tiny opaque quads. Attenuate the brain crossing so
  // titles and synapses remain readable while the same organisms travel through.
  const disc=float(1).sub(uv().sub(.5).length().mul(2)).max(0).pow(1.5);
@@ -58,7 +79,7 @@ export function createObservationClouds(scene,renderer,host,brain,visibleKeys){
  material.scaleNode=mass.mul(selected.select(.042,.029));
  const mesh=new THREE.InstancedMesh(geometry,material,count);mesh.count=0;mesh.frustumCulled=false;scene.add(mesh);
  const focus=document.createElement('span');focus.className='brain-label organism-focus';focus.hidden=true;host.append(focus);
- let time=0,report=0,selectedId=null,selectedDatum=null,flow=store.stats(0);flow.active=[];flow.selected=null;
+ let time=state.time,report=0,inspectAt=-Infinity,visibleRevision=-1,selectedId=state.selectedId??null,selectedDatum=state.selectedDatum??null,flow=store.stats(state.time);flow.active=[];flow.selected=null;
  const projected=new THREE.Vector3(),sampled=new THREE.Vector3();
  function write(record,renderSlot){
   const category=CATEGORY_ORDER.indexOf(familyFor(record.datum.field.key).category);
@@ -78,19 +99,23 @@ export function createObservationClouds(scene,renderer,host,brain,visibleKeys){
   routeBuffer.needsUpdate=true;
  }
  function syncVisible(){
+  visibleRevision=store.revision();
   const dirty=visible.sync(store.slots,featured,write);
   drawCount.value=mesh.count=visible.records.length*PARTICLES_PER_ORGANISM;
   // Dispatch and draw only the dense visible list, including after a filter change.
   compute.count=mesh.count;if(dirty&&routeBuffer.updateRanges.length)upload();
  }
+ function setData(key,value){const text=String(value);if(host.dataset[key]!==text)host.dataset[key]=text;}
  function reportFlow(){
   flow=store.stats(time);flow.active=visible.records.filter(record=>organismStage(record,time)==='brain');flow.selected=selectedId;
+  flow.zoneTotals={...store.zoneTotals};flow.zoneLatest={...store.latestByZone};flow.lastDatum=store.lastDatum();
   flow.displayed=visible.records.length;
-  host.dataset.organisms=String(flow.displayed);host.dataset.organismsReceived=String(flow.received);
-  host.dataset.organismsStored=String(flow.retained);host.dataset.renderTokenCount=String(new Set(visible.records.map(r=>r.datum.tokenKey)).size);
-  host.dataset.organismsResident=String(flow.resident);host.dataset.organismsRetired=String(flow.retired);
-  host.dataset.particles=String(mesh.count);host.dataset.organismClock=time.toFixed(2);
-  host.dataset.organismModel='one-field-one-cloud';
+  setData('organisms',flow.displayed);setData('organismsReceived',flow.received);
+  setData('organismsStored',flow.retained);setData('renderTokenCount',new Set(visible.records.map(r=>r.datum.tokenKey)).size);
+  setData('organismsResident',flow.resident);setData('organismsRetired',flow.retired);
+  setData('organismsQueued',flow.queued);setData('organismsQueueLimit',flow.queueLimit);
+  setData('particles',mesh.count);setData('organismClock',time.toFixed(2));
+  setData('organismModel','one-field-one-cloud');
  }
  function sample(record){
   const path=brain.pathFor(record.datum),age=Math.max(0,time-record.birth),p=Math.min(1,age/JOURNEY_SECONDS);
@@ -98,19 +123,24 @@ export function createObservationClouds(scene,renderer,host,brain,visibleKeys){
   const end=path[3].clone().add(new THREE.Vector3(Math.cos(phase)*radius,Math.sin(phase)*radius*.95,Math.sin(phase*.7)*radius*.22));
   return sampled.set(...journeyPoint([path[0].toArray(),path[1].toArray(),path[2].toArray(),end.toArray()],p,record.seed,time));
  }
+ // Re-upload retained records without changing their birth or re-ingesting.
+ syncVisible();reportFlow();
  return {
   setTokens(keys){featured.clear();keys.forEach(key=>featured.add(key));store.setVisibleKeys(keys);syncVisible();reportFlow();},
-  ingest(route){store.ingest(route);brain.ingest(route);},
+  ingest(route){const accepted=store.ingest(route);if(accepted.length)brain.ingest({...route,rows:accepted});},
   relayout(){visible.records.forEach(write);if(visible.records.length)upload();},
+  retarget(keys){
+   if(retargetObservationRoutes(visible.records,keys,brain.pathFor,targets,routeBuffer))upload();
+  },
   flow(){return flow;},
-  select(datum){selectedDatum=datum;selectedId=datum?.id??null;},
+  select(datum){selectedDatum=state.selectedDatum=datum;selectedId=state.selectedId=datum?.id??null;inspectAt=-Infinity;},
   update(dt,camera,width,height,frozen,reduced=false){
    // One bounded physics integration per frame prevents a GPU catch-up spiral.
    // The observation journey still advances on the full presentation clock.
-   if(!frozen&&!reduced){time+=dt;clock.value=time;physicsStep.value=Math.min(dt,1/30);if(mesh.count&&dt>0)renderer.compute(compute);}
-   report+=dt;if(report>=.1){report=0;store.advance(time,reduced);syncVisible();reportFlow();}
+   if(!frozen&&!reduced){time+=dt;state.time=time;clock.value=time;physicsStep.value=Math.min(dt,1/30);if(mesh.count&&dt>0)renderer.compute(compute);}
+   report+=dt;if(report>=.1){report=0;if(!frozen)store.advance(time,reduced);if(visibleRevision!==store.revision())syncVisible();reportFlow();}
    const record=selectedId?store.get(selectedId):null;selectedSlot.value=selectedId?visible.indexOf(selectedId):-1;
-   host.dataset.selectedOrganism=record?JSON.stringify({id:record.datum.id,slot:record.slot,stage:organismStage(record,time),tokenKey:record.datum.tokenKey,particles:PARTICLES_PER_ORGANISM}):'';
+   if(time-inspectAt>=.1){inspectAt=time;setData('selectedOrganism',record?JSON.stringify({id:record.datum.id,slot:record.slot,stage:organismStage(record,time),tokenKey:record.datum.tokenKey,particles:PARTICLES_PER_ORGANISM}):'');}
    if(record&&selectedSlot.value>=0){
     projected.copy(sample(record)).project(camera);focus.hidden=Math.abs(projected.z)>1||Math.abs(projected.x)>1||Math.abs(projected.y)>1;
     focus.textContent=`${record.datum.field.key} ${String(record.datum.field.value).slice(0,18)} → ${record.datum.tokenName} · ${organismStage(record,time)}`;
@@ -121,3 +151,6 @@ export function createObservationClouds(scene,renderer,host,brain,visibleKeys){
   dispose(){scene.remove(mesh);mesh.dispose();focus.remove();resources.forEach(r=>r.dispose());}
  };
 }
+
+
+
