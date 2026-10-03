@@ -2,6 +2,7 @@ import {useEffect,useRef} from 'react';
 import type {Capture,GlobalFieldStats} from './AgentTradingJev';
 import {elapsedLabel,lastPresentedAt,networkCounterAt,totalCounterAt} from './global-counter';
 import {chainMark} from './network-marks';
+import {networkSourceFreshness} from './scene-cohort';
 const chains=['robinhood','bsc','solana'];
 const names=['Robinhood Chain','BSC','Solana'];
 const format=new Intl.NumberFormat('en-US');
@@ -11,18 +12,17 @@ export function StreamMetrics({stats,sources,total,byChain,connectionError=false
  const root=useRef<HTMLDivElement>(null),latest=useRef({stats,sources,total,byChain,connectionError,captureStale,viewOnly});latest.current={stats,sources,total,byChain,connectionError,captureStale,viewOnly};
  useEffect(()=>{let frame=0;const count=root.current?.querySelector<HTMLElement>('[data-total-count]'),ports=Array.from(root.current?.querySelectorAll<HTMLElement>('[data-chain]')??[]);
   function paint(){
-   const {stats,sources,total,byChain,connectionError,captureStale,viewOnly}=latest.current,now=Date.now();
+   const {stats,sources,total,byChain,connectionError,viewOnly}=latest.current,now=Date.now();
    if(count){count.textContent=format.format(stats?totalCounterAt(stats,now):total);count.dataset.globalFields=String(stats?.total??total);}
    for(const [i,port] of ports.entries()){
-    const chain=chains[i],networkSources=sources?.filter(s=>s.chain===chain)??[],source=networkSources.slice().sort((a,b)=>Date.parse(b.receivedAt)-Date.parse(a.receivedAt))[0];
-    const age=source?Math.max(0,now-Date.parse(source.receivedAt)):Infinity,cadence=source?.cadenceMs??60000;
+    const chain=chains[i],freshness=networkSourceFreshness(sources,chain,now),{age,stale,partial}=freshness;
     const delivered=stats?lastPresentedAt(stats,chain,now):null,elapsed=delivered===null?Infinity:Math.max(0,now-delivered);
     port.querySelector('b')!.textContent=format.format(stats?networkCounterAt(stats,chain,now):byChain[chain]??0);
-    const stale=!!source&&age>cadence*2+10000;
-    port.querySelector('small')!.textContent=connectionError?'Reconnecting':viewOnly?'Syncing':stale||captureStale?'Stale':delivered===null?'Waiting':'Δ '+elapsedLabel(elapsed);
-    port.dataset.stale=String(connectionError||stale||captureStale||viewOnly);
+    port.querySelector('small')!.textContent=connectionError?'Reconnecting':viewOnly?'Syncing':stale?'Stale':partial?'Partial':!freshness.items.length||delivered===null?'Waiting':'Δ '+elapsedLabel(elapsed);
+    port.dataset.stale=String(connectionError||stale||partial||viewOnly);
+    port.dataset.sourceState=!freshness.items.length?'unknown':stale?'stale':partial?'partial':'recent';
     // Source time remains available; presentation precision is not ingest latency.
-    port.title=names[i]+' · Last presented data point '+elapsedLabel(elapsed)+' ago · Capture age '+elapsedLabel(age)+' · '+networkSources.map(s=>(s.endpoint==='trenches'?'Launches':'Ranking')+' every '+((s.cadenceMs??0)/1000).toFixed(0)+'s'+(s.measuredCadenceMs?' (measured '+(s.measuredCadenceMs/1000).toFixed(1)+'s)':'')).join(' / ');
+    port.title=names[i]+' · Last presented data point '+elapsedLabel(elapsed)+' ago · Capture age '+elapsedLabel(age)+' · '+freshness.items.map(({source:s,age,stale})=>(s.endpoint==='trenches'?'Launches':'Ranking')+' '+elapsedLabel(age)+' ago · '+(stale?'stale':'recent')+' · every '+((s.cadenceMs??0)/1000).toFixed(0)+'s'+(s.measuredCadenceMs?' (measured '+(s.measuredCadenceMs/1000).toFixed(1)+'s)':'')).join(' / ')+(freshness.missing.length?' · Missing '+freshness.missing.map(endpoint=>endpoint==='trenches'?'Launches':'Ranking').join(', '):'');
    }
    frame=requestAnimationFrame(paint);
   }
