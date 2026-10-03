@@ -38,7 +38,7 @@ test('a short pause without newer captures preserves every field and its receipt
  const p=createStreamPacer(),route=cycle(0);p.add(route,0,[],wall);
  const before=p.take(1000).flatMap(g=>g.rows);p.defer(60000);
  assert.equal(p.take(61000).length,0);
- const after=p.take(75000).flatMap(g=>g.rows);
+ const after=[];while(p.stats().pending)after.push(...p.take(75000).flatMap(g=>g.rows));
  assert.deepEqual([...before,...after].map(r=>r.id).sort(),route.rows.map(r=>r.id).sort());
  assert.ok([...before,...after].every(r=>r.receivedAt===route.rows[0].receivedAt));
 });
@@ -65,3 +65,17 @@ test('compact source marks clear the news and brain, including both token layout
   assert.ok(timelineBounds(width,height,true,[])[0].y-48>=footer+16);
  }
 });
+
+test('overlapping release counters keep their true progress while earlier fields are still playing',async()=>{
+ const {networkCounterAt,totalCounterAt,lastPresentedAt}=await import('../src/agent-trading/global-counter.js');
+ const windows=[{from:0,to:150,start:wall+1000,duration:15000},{from:150,to:300,start:wall+6000,duration:15000}];
+ const stats={total:900,byChain:{robinhood:300,bsc:300,solana:300},networkTimelines:{robinhood:windows,bsc:windows,solana:windows}};
+ assert.equal(networkCounterAt(stats,'bsc',wall+6000),50);
+ assert.equal(lastPresentedAt(stats,'bsc',wall+6000),wall+6000);
+ for(let at=0;at<=22000;at+=100){
+  const expected=Math.floor(Math.min(150,Math.max(0,(at-1000)/100))+Math.min(150,Math.max(0,(at-6000)/100)));
+  assert.equal(networkCounterAt(stats,'bsc',wall+at),expected);
+  assert.equal(totalCounterAt(stats,wall+at),expected*3);
+ }
+});
+
