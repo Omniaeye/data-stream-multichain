@@ -153,8 +153,8 @@ export function createNeuralBrain(scene,host,centers,getTokens,onInspect,getRadi
  // The brain supplies anchors only. Observation clouds render the whole journey.
  function inspection(zone){
   const flow=getFlow(),current=flow.active.find(record=>(!zone||record.datum.zone===zone));
-  return {...flow,zone:zone??null,zoneCount:zone?zoneTotals[zone]??0:null,
-   activeRoute:!!current,latest:current?.datum??(zone?latest[zone]??null:lastDatum)};
+  return {...flow,zone:zone??null,zoneCount:zone?flow.zoneTotals?.[zone]??zoneTotals[zone]??0:null,
+   activeRoute:!!current,latest:current?.datum??(zone?flow.zoneLatest?.[zone]??latest[zone]??null:flow.lastDatum??lastDatum)};
  }
  function pathFor(datum){
   const index=tokenMap.get(datum.tokenKey)?.index??-1,chainIndex=Math.max(0,CHAINS.indexOf(datum.chain));
@@ -210,7 +210,7 @@ export function createNeuralBrain(scene,host,centers,getTokens,onInspect,getRadi
    routeLabel.textContent=atBrain?`${atBrain.field.key}: ${String(atBrain.field.value).slice(0,22)} → ${atBrain.tokenName}`:'';
    host.dataset.brainRoute=atBrain?JSON.stringify({id:atBrain.id,zone:atBrain.zone,destination:atBrain.tokenKey,count:1,captureId:atBrain.captureId}):'';
    for(const [key,el] of Object.entries(regionLabels)){
-    el.dataset.active=String(!!lit[key]);el.title=zoneTotals[key]?`${zoneTotals[key].toLocaleString()} received fields · ${REGIONS[key].label}`:REGIONS[key].label;
+    el.dataset.active=String(!!lit[key]);const total=flow.zoneTotals?.[key]??zoneTotals[key]??0;el.title=total?`${total.toLocaleString()} received fields · ${REGIONS[key].label}`:REGIONS[key].label;
     const families=[...new Map(flow.active.filter(record=>record.datum.zone===key).map(record=>{const family=familyFor(record.datum.field.key);return [family.id,family];})).values()];
     const activeFamily=families[Math.floor(tagClock/2)%families.length];
     el.textContent='';

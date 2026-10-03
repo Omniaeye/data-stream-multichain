@@ -4,7 +4,7 @@ import * as THREE from 'three/webgpu';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {ATTRACTOR_COUNT,TOKEN_EXIT_GRACE_MS} from './attractor-selection.js';
 import {tokenKey,canonicalChain,numericField} from './token-selection.js';
-import {createObservationClouds} from './observation-clouds.js';
+import {createObservationClouds,createObservationCloudState} from './observation-clouds.js';
 import {logoUrl} from './market-activity.js';
 import {createNeuralBrain} from './neural-brain.js';
 import {tokenAppearance,capLabelColor,globalTokenDiameter} from './token-appearance.js';
@@ -18,6 +18,7 @@ import {compactCap,tokenTicker} from './token-details.js';
 import {createValueMotion} from './value-motion.js';
 import {createMomentum} from './momentum.js';
 import {createRenderRecovery} from './render-recovery.js';
+import {createFrameTiming} from './frame-timing.js';
 
 export function createUniverse(host,onSelect,onError,onBrainInspect,trading={}){
  let disposed=false,renderer,controls,camera,scene,ready=false,paused=false,last=0,frames=0,statsAt=0,narrow=null;
@@ -44,9 +45,11 @@ export function createUniverse(host,onSelect,onError,onBrainInspect,trading={}){
  timelineNav.append(newer,slider,older);host.append(timelineNav);
  function moveTimeline(value){focusAnchor=null;timelineOffset=Math.max(0,Math.min(timelineLimit,value));slider.value=String(timelineOffset);layoutSignature='';frameCamera();controls?.update();layout(true);}
  newer.onclick=()=>moveTimeline(timelineOffset-(currentBounds?.[0].width??300)*.8);older.onclick=()=>moveTimeline(timelineOffset+(currentBounds?.[0].width??300)*.8);slider.oninput=()=>moveTimeline(Number(slider.value));
+ // CPU observation evidence survives renderer generations; never a provider replay.
+ const observationState=createObservationCloudState();
  let brain,clouds,sources=[];
  let tokens=[],cohort=null,cohortSet=null,routingKeys=[],routingSet=new Set(),flowCache=null,filteredFlow=null;let badgesDirty=true,lastMatrix='';const reduced=matchMedia('(prefers-reduced-motion: reduce)');
- const frameCost={clouds:0,brain:0,badges:0,render:0};
+ const frameCost={clouds:0,brain:0,badges:0,render:0},frameTiming=createFrameTiming();
  const projected=new THREE.Vector3(),edge=new THREE.Vector3(),cameraRight=new THREE.Vector3();
  function frameCamera(){if(!camera)return;camera.position.set(0,narrow?.75:1.1,16);controls?.target.set(0,narrow?-.35:0,0);camera.lookAt(0,narrow?-.35:0,0);camera.updateMatrixWorld();}
  function unproject(x,y){const p=new THREE.Vector3(x/fieldWidth*2-1,1-y/fieldHeight*2,.5).unproject(layoutCamera),ray=p.sub(layoutCamera.position);return layoutCamera.position.clone().addScaledVector(ray,-layoutCamera.position.z/ray.z);}
@@ -128,7 +131,7 @@ export function createUniverse(host,onSelect,onError,onBrainInspect,trading={}){
   releaseRenderer(previousRenderer);
   packed=null;layoutSignature='';packedViewport='';worldPositions.clear();radii.clear();
   flowCache=null;filteredFlow=null;narrow=null;last=0;frames=0;statsAt=performance.now();lastMatrix='';badgesDirty=true;
-  for(const key of Object.keys(frameCost))frameCost[key]=0;
+  for(const key of Object.keys(frameCost))frameCost[key]=0;frameTiming.reset();
   host.dataset.particles='0';host.dataset.fps='0';
  }
  const recovery=createRenderRecovery({
@@ -157,14 +160,15 @@ export function createUniverse(host,onSelect,onError,onBrainInspect,trading={}){
   scene=new THREE.Scene();camera=new THREE.PerspectiveCamera(30,1,.1,100);camera.position.set(3,5,8);
   controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.enableRotate=false;controls.screenSpacePanning=true;controls.minDistance=2;controls.maxDistance=20;resize();
   brain=createNeuralBrain(scene,host,centers,()=>tokens,onBrainInspect,t=>radii.get(tokenKey(t))??tokenAppearance(t).radius,trading);placeBrain();brain.setSources(sources);brain.setCohort(routingKeys);
-  clouds=createObservationClouds(scene,renderer,host,brain,tokens.map(tokenKey));brain.connect(()=>{const f=clouds.flow();if(f!==flowCache){flowCache=f;filteredFlow={...f,active:f.active.filter(r=>routingSet.has(r.datum.tokenKey))};}return filteredFlow;});
+  clouds=createObservationClouds(scene,renderer,host,brain,tokens.map(tokenKey),observationState);brain.connect(()=>{const f=clouds.flow();if(f!==flowCache){flowCache=f;filteredFlow={...f,active:f.active.filter(r=>routingSet.has(r.datum.tokenKey))};}return filteredFlow;});
   clouds.setTokens(routingKeys);
   ready=true;sync();host.dataset.backend=renderer.backend.isWebGPUBackend?'WebGPU':'WebGL2';
   await instance.setAnimationLoop(now=>{if(!recovery.current(generation)||document.hidden){last=now;statsAt=now;frames=0;return;}try{
    if(now-capPaintAt>=32){capPaintAt=now;for(const [key,motion] of capMotions){const b=badgeMap.get(key),label=b?.lastElementChild?.lastElementChild;if(!label)continue;const active=motion.active(now);if(active||label.dataset.updating==='true'){label.textContent=compactCap(motion.at(now));label.dataset.updating=String(active);}}}
-   const elapsed=Math.min((now-(last||now))/1000,.15);last=now;
+   const frameMs=now-(last||now);frameTiming.sample(frameMs);const elapsed=Math.min(frameMs/1000,.15);last=now;
    if(cameraFlight){const t=Math.min(1,(now-cameraFlight.start)/600),ease=1-(1-t)**3;controls.target.lerpVectors(cameraFlight.from,cameraFlight.to,ease);camera.position.lerpVectors(cameraFlight.eye,cameraFlight.end,ease);if(t===1)cameraFlight=null;}
-   controls.update();const r=host.getBoundingClientRect();
+   // Dimensions are refreshed by ResizeObserver, avoiding forced layout after badge writes.
+   controls.update();const r={width:fieldWidth,height:fieldHeight};
    const gap=now-(momentumAt||now);momentumAt=now;if(paused||gap>1000)momentum.defer(paused?gap:gap-16);
    const arrivals=momentum.frame(now);momentumFrame=new Map(arrivals.map(item=>[item.key,item]));
    const nextStage=arrivals.map(item=>item.key+':'+(item.progress>0)).join('|');if(nextStage!==stageSignature){stageSignature=nextStage;layout(true);}
@@ -182,7 +186,7 @@ export function createUniverse(host,onSelect,onError,onBrainInspect,trading={}){
     if(item.progress===1)arriving.set(item.key,Date.now()+TOKEN_NEW_MARK_MS);
    }
    if(arrivals.length||stagedLast.size)badgesDirty=true;
-   momentumHeading.dataset.active=String(momentum.pending()>0);host.dataset.momentum=String(arrivals.length);
+   const momentumActive=String(momentum.pending()>0),momentumCount=String(arrivals.length);if(momentumHeading.dataset.active!==momentumActive)momentumHeading.dataset.active=momentumActive;if(host.dataset.momentum!==momentumCount)host.dataset.momentum=momentumCount;
    const t0=performance.now();clouds.retarget(movingKeys);clouds.update(elapsed,camera,r.width,r.height,paused,reduced.matches);const t1=performance.now();brain.update(elapsed,camera,r.width,r.height,paused,reduced.matches);const t2=performance.now();
    const matrix=camera.matrixWorld.elements.join(',')+':'+r.width+':'+r.height;if(badgesDirty||matrix!==lastMatrix){lastMatrix=matrix;badgesDirty=false;
    cameraRight.setFromMatrixColumn(camera.matrixWorld,0);
@@ -197,7 +201,7 @@ export function createUniverse(host,onSelect,onError,onBrainInspect,trading={}){
     if(!hidden&&(arriving.get(tokenKey(tokens[i]))??0)>Date.now())labels.push({key:tokenKey(tokens[i]),time:timelineTime(tokens[i]),x:parseFloat(left),y:parseFloat(top),radius:parseFloat(diameter)/2+30*(view==='global'?packed.labelScale:1)});
    });
    const textVisible=placeNewLabels(labels);badges.forEach(b=>{b.dataset.newLabel=String(textVisible.has(b.dataset.tokenKey));});}
-   const t3=performance.now();renderer.render(scene,camera);const t4=performance.now();recovery.frame(generation);frameCost.clouds+=t1-t0;frameCost.brain+=t2-t1;frameCost.badges+=t3-t2;frameCost.render+=t4-t3;frames++;if(now-statsAt>=2000){host.dataset.fps=String(Math.round(frames*1000/(now-statsAt)));host.dataset.frameCosts=JSON.stringify(Object.fromEntries(Object.entries(frameCost).map(([key,value])=>[key,+(value/frames).toFixed(2)])));Object.keys(frameCost).forEach(key=>frameCost[key]=0);host.dataset.attractors=String(tokens.length);statsAt=now;frames=0;}
+   const t3=performance.now();renderer.render(scene,camera);const t4=performance.now();recovery.frame(generation);frameCost.clouds+=t1-t0;frameCost.brain+=t2-t1;frameCost.badges+=t3-t2;frameCost.render+=t4-t3;frames++;if(now-statsAt>=2000){host.dataset.fps=String(Math.round(frames*1000/(now-statsAt)));host.dataset.frameTiming=JSON.stringify(frameTiming.stats());frameTiming.reset();host.dataset.frameCosts=JSON.stringify(Object.fromEntries(Object.entries(frameCost).map(([key,value])=>[key,+(value/frames).toFixed(2)])));Object.keys(frameCost).forEach(key=>frameCost[key]=0);host.dataset.attractors=String(tokens.length);statsAt=now;frames=0;}
    for(const badge of leavingBadges){const opacity=String(Math.min(1,Math.max(0,(badge.exitAt-Date.now())/1000)));if(badge.el.style.opacity!==opacity)badge.el.style.opacity=opacity;}
    for(const [key,until] of arriving)if(Date.now()>=until){arriving.delete(key);const badge=badgeMap.get(key);if(badge)badge.dataset.arriving='false';badgesDirty=true;}
   }catch(error){recovery.fail(generation,error);}});
@@ -205,5 +209,6 @@ export function createUniverse(host,onSelect,onError,onBrainInspect,trading={}){
  function highlightTokens(keys){momentum.add(keys);const until=Infinity;for(const key of keys){arriving.set(key,until);const b=badgeMap.get(key);if(b)b.dataset.arriving='true';}layout();}
  function revealToken(key){if(view==='global'){frameCamera();controls?.update();badgesDirty=true;return;}const p=packed?.points.get(key);if(!p||!camera)return;cameraFlight=null;const bound=currentBounds[0];moveTimeline(p.x-bound.x-bound.width*.4);focusAnchor=key;focusFraction=.4;}
  function setSelected(key){focusAnchor=key;const p=packed?.points.get(key);if(p)focusFraction=THREE.MathUtils.clamp((p.x-timelineOffset-currentBounds[0].x)/currentBounds[0].width,.15,.85);}
- return {isReady:()=>recovery.isReady(),setAssetLoading(value){assetsEnabled=value;pumpImages();},highlightTokens,revealToken,setSelected,setMode(mode){if(view===mode)return;view=mode;packed=null;focusAnchor=null;timelineOffset=0;layoutSignature='';if(camera){frameCamera();controls?.update();}layout(true);},setTracked(keys){trackedKeys=new Set(keys);for(const [key,b] of badgeMap)b.dataset.socialTracked=String(trackedKeys.has(key));},setSources(next){sources=next;brain?.setSources(next);},setCohort(keys){if(cohortSet?.size===keys.length&&keys.every(key=>cohortSet.has(key)))return;cohort=keys;cohortSet=new Set(keys);layoutSignature='';flowCache=null;layout(true);},setTokens(next){tokens=next.slice(0,ATTRACTOR_COUNT);layout();recovery.start();sync();},ingest(route){if(recovery.isReady()&&clouds)clouds.ingest(route);},selectDatum(datum){clouds?.select(datum);},resetView(){if(!camera)return;cameraFlight=null;moveTimeline(0);},pause(value){paused=value;host.dataset.paused=String(value);},dispose(){disposed=true;clearInterval(recoveryTimer);recovery.dispose();timelineHint.remove();timelineNav.remove();momentumHeading.remove();imageObserver.disconnect();imageQueue.clear();for(const [img,timer] of imageRequests){clearTimeout(timer);img.onload=null;img.onerror=null;img.removeAttribute('src');}imageRequests.clear();observer.disconnect();badges.forEach(b=>b.remove());}};
+ return {isReady:()=>recovery.isReady(),canAccept(fields){const accepts=observationState.store.canAccept(fields);const status=String(!accepts);if(host.dataset.backpressure!==status)host.dataset.backpressure=status;return accepts;},setAssetLoading(value){assetsEnabled=value;pumpImages();},highlightTokens,revealToken,setSelected,setMode(mode){if(view===mode)return;view=mode;packed=null;focusAnchor=null;timelineOffset=0;layoutSignature='';if(camera){frameCamera();controls?.update();}layout(true);},setTracked(keys){trackedKeys=new Set(keys);for(const [key,b] of badgeMap)b.dataset.socialTracked=String(trackedKeys.has(key));},setSources(next){sources=next;brain?.setSources(next);},setCohort(keys){if(cohortSet?.size===keys.length&&keys.every(key=>cohortSet.has(key)))return;cohort=keys;cohortSet=new Set(keys);layoutSignature='';flowCache=null;layout(true);},setTokens(next){tokens=next.slice(0,ATTRACTOR_COUNT);layout();recovery.start();sync();},ingest(route){if(recovery.isReady()&&clouds)clouds.ingest(route);},selectDatum(datum){clouds?.select(datum);},resetView(){if(!camera)return;cameraFlight=null;moveTimeline(0);},pause(value){paused=value;host.dataset.paused=String(value);},dispose(){disposed=true;clearInterval(recoveryTimer);recovery.dispose();timelineHint.remove();timelineNav.remove();momentumHeading.remove();imageObserver.disconnect();imageQueue.clear();for(const [img,timer] of imageRequests){clearTimeout(timer);img.onload=null;img.onerror=null;img.removeAttribute('src');}imageRequests.clear();observer.disconnect();badges.forEach(b=>b.remove());}};
 }
+
