@@ -1,0 +1,23 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createServer} from 'node:http';
+import {mkdtemp,writeFile,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join,resolve,sep} from 'node:path';
+import {createHash} from 'node:crypto';
+import {createPrivatePreview} from '../src/server/private-preview.mjs';
+test('hashed private assets compress and revalidate after authentication, HTML stays uncached',async t=>{
+ const root=await mkdtemp(join(tmpdir(),'jev-cache-')),body='export const marker="cache-test";'.repeat(200);
+ await writeFile(join(root,'index-abcd1234.js'),body);await writeFile(join(root,'index.html'),'HTML');
+ const auth='Basic '+Buffer.from('user:password').toString('base64');
+ const serve=createPrivatePreview({root,env:{JEV_TEST_AUTH_SHA256:createHash('sha256').update('user:password').digest('hex')}});
+ const server=createServer((req,res)=>serve(req,res,new URL(req.url,'http://test')));await new Promise(r=>server.listen(0,'127.0.0.1',r));
+ t.after(async()=>{await new Promise(r=>server.close(r));assert.ok(resolve(root).startsWith(resolve(tmpdir())+sep));await rm(root,{recursive:true,force:true});});
+ const url='http://127.0.0.1:'+server.address().port+'/jev-test/index-abcd1234.js';
+ const first=await fetch(url,{headers:{authorization:auth,'accept-encoding':'gzip'}});
+ assert.equal(first.headers.get('content-encoding'),'gzip');assert.match(first.headers.get('cache-control'),/private.*immutable/);assert.equal(await first.text(),body);
+ const etag=first.headers.get('etag');assert.ok(etag);
+ assert.equal((await fetch(url,{headers:{authorization:auth,'if-none-match':etag}})).status,304);
+ assert.equal((await fetch(url,{headers:{'if-none-match':etag}})).status,401);
+ const html=await fetch(url.replace('index-abcd1234.js',''),{headers:{authorization:auth}});assert.equal(html.headers.get('cache-control'),'no-store');
+});
