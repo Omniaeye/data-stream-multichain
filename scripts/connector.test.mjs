@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {gunzipSync} from 'node:zlib';
 import {createConnector} from '../src/server/connector.mjs';
+import {unpackLive} from '../src/agent-trading/live-wire.js';
 function response(){return {status:0,headers:null,body:null,writeHead(status,headers){this.status=status;this.headers=headers;},end(body){this.body=body;}};}
 const env={DATA_STREAM_UPSTREAM:'https://private.example',NEWS_STREAM_UPSTREAM:'https://private.example',JEV_GATEWAY_KEY:'test-only'};
 test('only approved routes reach authenticated upstream; ETag avoids duplicate bodies',async()=>{
@@ -55,4 +56,24 @@ test('an upstream 304 without a retained representation fails closed',async()=>{
  const serve=createConnector(env,{fetchImpl:async()=>new Response(null,{status:304})});
  const res=response();await serve({method:'GET',headers:{'if-none-match':'"client-only"'}},res,new URL('https://site/__jev/live'));
  assert.equal(res.status,503);
+});
+test('the prepared view also warms the verified snapshot, which survives a slow refresh',async()=>{
+ let now=0,reads=0,release;
+ const gate=new Promise(resolve=>{release=resolve;});
+ const snapshot=id=>({kind:'snapshot',revision:id+':hash',capture:{mode:'live',captureId:id,captureHash:'hash',receivedAt:'2026-09-28T12:00:00Z',tokens:[]}});
+ const serve=createConnector(env,{clock:()=>now,fetchImpl:async()=>{if(++reads===1)return new Response(JSON.stringify(snapshot('a')),{headers:{etag:'"a"'}});await gate;return new Response(JSON.stringify(snapshot('b')),{headers:{etag:'"b"'}});}});
+ await serve.warm();
+ const url=new URL('https://site/__jev/live?sync=1&wire=1'),first=response();
+ await serve({method:'GET',headers:{}},first,url);
+ assert.equal(reads,1,'bootstrap must reuse its already downloaded full capture');
+ assert.deepEqual(unpackLive(JSON.parse(first.body)),snapshot('a'));
+ now=1000;
+ const pending=response();
+ try{
+  await Promise.race([serve({method:'GET',headers:{'if-none-match':'"a"'}},pending,url),new Promise((_,reject)=>setTimeout(()=>reject(Error('cached data blocked by refresh')),100))]);
+  assert.equal(pending.status,304);assert.equal(reads,2);
+ }finally{release();}
+ await new Promise(resolve=>setImmediate(resolve));
+ const next=response();await serve({method:'GET',headers:{'if-none-match':'"a"'}},next,url);
+ assert.equal(next.status,200);assert.deepEqual(unpackLive(JSON.parse(next.body)),snapshot('b'));
 });
