@@ -10,7 +10,7 @@ import {DataStream} from './DataStream';
 import {appendGroupedStream,type GroupedStream} from './field-families';
 import {createStreamPacer} from './stream-pacer';
 import {trackedSocialKeys} from './social-trace';
-import {persistentSceneCohort as sceneCohort,captureSceneClock} from './scene-cohort';
+import {persistentSceneCohort,sceneCohort,captureSceneClock,createSceneCohortState,seedHistoricalSceneCohortState,isTokenSourceDelayed} from './scene-cohort';
 import {TokenArrivalNotice} from './TokenArrivalNotice';
 import {TokenHoverCard} from './TokenHoverCard';
 import {NewsTokenLinks,type NewsSelection} from './NewsTokenLinks';
@@ -36,12 +36,14 @@ export function AttractorPreview({capture,connectionError,arrivalHistoryKey,view
  const [selectionOrigin,setSelectionOrigin]=useState<NewsSelection|null>(null);
  const [brain,setBrain]=useState<BrainInspection|null>(null),previous=useRef<Capture|undefined>(undefined);
  const pacer=useRef(createStreamPacer());
+ const [cohortState]=useState(createSceneCohortState);
  const motionFrozen=useRef(false);
  const [stream,setStream]=useState<GroupedStream>({rows:[],total:0,byChain:{}});
  useEffect(()=>{const query=matchMedia('(max-width:1120px)');const changed=()=>{if(!query.matches)setStreamOpen(false);};query.addEventListener('change',changed);return()=>query.removeEventListener('change',changed);},[]);
  const rosterTick=Math.floor(Date.now()/1000);
  const tokens=useMemo(()=>{
-  retained.current=selectAttractors(retained.current,capture?.tokens??[],{exitGraceMs:TOKEN_EXIT_GRACE_MS});
+  const now=Date.now(),holdMissingKeys=new Set(retained.current.filter(token=>isTokenSourceDelayed(token,capture?.sources??[],now)).map(tokenKey));
+  retained.current=selectAttractors(retained.current,capture?.tokens??[],{now,exitGraceMs:TOKEN_EXIT_GRACE_MS,holdMissingKeys});
   return retained.current;
  },[capture,rosterTick]);
 
@@ -50,9 +52,14 @@ export function AttractorPreview({capture,connectionError,arrivalHistoryKey,view
  const sceneClock=captureSceneClock(capture);
  const delayed=connectionError||sceneClock.stale||viewOnly;
  const tracked=useMemo(()=>trackedSocialKeys(news.snapshot?.links??[],news.now),[news.snapshot,news.now]);
- const visible=useMemo(()=>sceneCohort(tokens,{view,hours:24,quality:true,trackedKeys:tracked,now:Date.now()}),[tokens,view,cohortTick,tracked,sceneClock.stale]);
+ const visible=useMemo(()=>{
+  const now=Date.now();
+  if(capture&&tokens.length)seedHistoricalSceneCohortState(tokens,{state:cohortState,quality:true,now});
+  return persistentSceneCohort(tokens,{state:cohortState,view,hours:24,quality:true,trackedKeys:tracked,now});
+ },[tokens,view,cohortTick,tracked,sceneClock.stale,cohortState,capture]);
  const visibleKeys=useMemo(()=>visible.map(tokenKey),[visible]);
- const eligibleKeys=useMemo(()=>view==='global'?visibleKeys:sceneCohort(tokens,{quality:true,now:Date.now()}).map(tokenKey),[tokens,view,cohortTick,visibleKeys,sceneClock.stale]);
+ // Historical visual retention never creates a fresh Momentum arrival.
+ const eligibleKeys=useMemo(()=>sceneCohort(tokens,{quality:true,now:Date.now()}).map(tokenKey),[tokens,cohortTick,sceneClock.stale]);
  function locateToken(selection:NewsSelection){setSelectionOrigin(selection);focusRequest.current=selection.key;setSelected(selection.key);setBrain(null);}
  useEffect(()=>{if(!host.current)return;previous.current=undefined;pacer.current=createStreamPacer();setStream({rows:[],total:0,byChain:{}});const scene=createUniverse(host.current,key=>{setSelected(key);setBrain(null);},unavailable=>setError(unavailable),(_zone,inspection)=>{setSelected(null);setBrain(inspection);},{session:tradingSession,onEvent:event=>setTradingRows(rows=>mergeTradingRow(rows,event))});engine.current=scene;
   let listGroups: ReturnType<typeof pacer.current.take>=[],lastListPaint=0,lastReport=0,lastTick=performance.now();
@@ -66,6 +73,8 @@ export function AttractorPreview({capture,connectionError,arrivalHistoryKey,view
    if(host.current&&now-lastReport>=250){lastReport=now;host.current.dataset.presentation=JSON.stringify(pacer.current.stats());}
    if(motionFrozen.current||!scene.isReady()){pacer.current.defer(gap);return;}
    if(gap>250)pacer.current.defer(gap-16);
+   // Keep excess fields in the bounded presentation queue until the CPU store has room.
+   if(!scene.canAccept(128))return; // At most 32 groups of four source fields per tick.
    const groups=pacer.current.take(now);listGroups.push(...groups);
    if(listGroups.length&&now-lastListPaint>=100){const ready=listGroups;listGroups=[];lastListPaint=now;setStream(value=>appendGroupedStream(value,ready));}
    if(!groups.length)return;const rows=groups.flatMap(g=>g.rows),keys=new Set(retained.current.map(tokenKey)),visible=rows.filter(r=>keys.has(r.tokenKey)).length;
