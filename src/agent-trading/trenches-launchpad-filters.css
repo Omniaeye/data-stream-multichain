@@ -1,0 +1,25 @@
+.tr-networks{align-items:flex-start}
+.tr-network-stack{display:flex;flex-direction:column;align-items:stretch;gap:1px}
+.tr-networks>button{align-self:flex-start}
+.tr-networks .tr-launchpads-trigger{display:flex;justify-content:center;gap:4px;height:18px;padding:0 6px;border:0;border-radius:3px;background:none;color:#758293;font:9px/1.2 Manrope,sans-serif}
+.tr-networks .tr-launchpads-trigger:hover,.tr-networks .tr-launchpads-trigger[aria-expanded=true]{color:#edf0f5;background:#ffffff07}
+.tr-networks .tr-launchpads-trigger[data-filtered=true]{color:#bdcadb}
+.tr-launchpads-trigger[data-filtered=true]:before{content:'';width:3px;height:3px;border-radius:50%;background:#bac8db}
+.tr-launchpads-menu{position:fixed;z-index:70;width:328px;max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px);display:flex;flex-direction:column;overflow:hidden;border:1px solid #39424e;border-radius:10px;background:#12171d;box-shadow:0 18px 60px #0009;color:#e4eaf2;font:12px/1.4 Manrope,sans-serif}
+.tr-launchpads-menu header{display:flex;align-items:center;justify-content:space-between;min-height:44px;padding:6px 12px;border-bottom:1px solid #ffffff0b}
+.tr-launchpads-menu header>span{display:flex;align-items:center;gap:8px;font-weight:600}
+.tr-launchpads-menu header img{width:14px;height:14px;object-fit:contain}
+.tr-launchpads-menu header button{width:28px;height:28px;border-radius:5px;font-size:19px;color:#99a7b9}
+.tr-launchpads-bulk{display:flex;gap:6px;padding:9px 12px}
+.tr-launchpads-bulk button{font-size:11px;padding:5px 8px;border:1px solid #ffffff14;border-radius:5px;color:#c0cddd;background:#ffffff03}
+.tr-launchpads-menu button:hover{background:#ffffff09;color:#fff}
+.tr-launchpads-options{display:flex;flex-direction:column;overflow-y:auto;max-height:330px;overscroll-behavior:contain;padding:0 7px 8px;scrollbar-width:thin;scrollbar-color:#53617455 transparent}
+.tr-launchpads-options>button{display:flex;align-items:center;gap:9px;min-height:33px;padding:6px 8px;border-radius:5px;text-align:left;color:#8f9bad;font-size:12px;flex-shrink:0}
+.tr-launchpads-options>button[aria-checked=true]{color:#e3e9f1}
+.tr-launchpads-options>button img{width:17px;height:17px;object-fit:contain;flex-shrink:0}
+.tr-launchpads-options>button[aria-checked=false] img{opacity:.45}
+.tr-launchpads-check{width:14px;height:14px;display:grid;place-items:center;border:1px solid #566170;border-radius:3px;font-size:10px;line-height:1;color:#132030;flex-shrink:0}
+[aria-checked=true]>.tr-launchpads-check{background:#cad5e3;border-color:#cad5e3}
+.tr-launchpads-options small{margin-left:auto;color:#be9a73;font-size:10px}
+.tr-controls{min-height:46px;height:46px}
+@media(max-width:700px){.tr-toolbar{height:174px}.tr-networks .tr-launchpads-trigger{height:20px;font-size:9px;padding:0 5px}.tr-controls{height:89px;min-height:89px}.tr-launchpads-options>button{min-height:36px}.tr-launchpads-menu{width:310px}}
