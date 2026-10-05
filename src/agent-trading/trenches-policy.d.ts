@@ -1,0 +1,16 @@
+import type {Token} from './AgentTradingJev';import type {NewsLink} from './useNewsSnapshot';
+export type Block={key:string;label:string;nativeId?:string;scope?:'all'|'tokens'|'posts'};
+export type TrenchesPreferences={chains:string[];launchpads:string[]|null;launchpadsByChain:Record<string,string[]|null>;mode:'new'|'active';hot:boolean;quickActions:boolean;postsOnly:boolean;feed:boolean;brain:boolean;motion:boolean;minLiquidity:number;minVolume:number;minHolders:number;minTransactions:number;maxTop10:number|null;maxCreator:number|null;hideRisk:boolean;blocks:Block[]};
+export function blockId(block:Block):string;
+export function tickerLabel(token:Token):string;
+export function tickerIdentity(token:Token):string|null;
+export function postIdentity(value:string):string|null;
+export const TRENCHES_DEFAULTS:TrenchesPreferences;
+export function money(value:number|null|undefined):string;
+export function socialIdentity(value:unknown):string|null;
+export function authorIdentity(event:any):string|null;
+export function blockedEvent(event:any,blocks:Block[]):boolean;
+export function tokenBlocked(token:Token,links:NewsLink[],blocks:Block[]):boolean;
+export function readPreferences(raw:unknown):TrenchesPreferences;
+export function tokenMatches(token:Token,prefs:TrenchesPreferences,links:NewsLink[],now?:number,captureTime?:number):boolean;
+export function groupTokens(tokens:Token[],byToken:Map<string,NewsLink[]>,blocks?:Block[],hot?:boolean):Array<{key:string;link:NewsLink|null;tokens:Token[]}>;
