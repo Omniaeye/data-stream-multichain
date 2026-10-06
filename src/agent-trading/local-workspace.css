@@ -1,0 +1,4 @@
+.workspace-preset{height:34px;max-width:108px;padding:0 24px 0 10px;border:1px solid #86c9b22b;border-radius:7px;background:#0b1713;color:#d9ffee;font:10px 'IBM Plex Mono',monospace;cursor:pointer}
+.workspace-preset:focus-visible{outline:2px solid #a3edcf;outline-offset:3px}
+.trenches-canvas{position:absolute;inset:82px 22px 18px calc(var(--stream-width) + 48px)}
+@media(max-width:600px){.scene-modes:has(.workspace-preset){flex-wrap:wrap;height:auto;min-height:44px}.scene-modes:has(.workspace-preset) .scene-jev-trading{display:none}.workspace-preset{max-width:88px;padding-right:8px;font-size:9px}.trenches-canvas{left:12px;right:12px}}
